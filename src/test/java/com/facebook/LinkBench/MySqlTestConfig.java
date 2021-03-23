@@ -31,8 +31,8 @@ public class MySqlTestConfig {
   // Hardcoded parameters for now
   static String host = "localhost";
   static int port = 3306;
-  static String user = "root";
-  static String pass = "pw";
+  static String user = "robin";
+  static String pass = "test";
   static String linktable = "test_linktable";
   static String counttable = "test_counttable";
   static String nodetable = "test_nodetable";

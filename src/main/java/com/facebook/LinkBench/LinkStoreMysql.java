@@ -82,7 +82,7 @@ public class LinkStoreMysql extends LinkStoreSql {
   }
 
   protected String getJdbcClassName() {
-    return "com.mysql.jdbc.Driver";
+    return "com.mysql.cj.jdbc.Driver";
   }
 
   protected String getJdbcOptions() {
