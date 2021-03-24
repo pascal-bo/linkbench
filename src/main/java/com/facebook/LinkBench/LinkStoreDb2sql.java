@@ -102,10 +102,12 @@ public class LinkStoreDb2sql extends LinkStoreSql {
   public void resetNodeStore(String dbid, long startID) throws SQLException {
     checkNodeTableConfigured();
     // Truncate table deletes all data and allows us to reset autoincrement
-    stmt_ac1.execute(String.format("TRUNCATE TABLE %s.%s;", dbid, nodetable));
-   
-    stmt_ac1.execute(String.format("ALTER TABLE `%s`.`%s` " +
-                                   "AUTO_INCREMENT = %d;", dbid, nodetable, startID));
+    stmt_ac1.execute(String.format("TRUNCATE TABLE %s.%s IMMEDIATE;", dbid, linktable));
+    stmt_ac1.execute(String.format("TRUNCATE TABLE %s.%s IMMEDIATE;", dbid, counttable));
+    stmt_ac1.execute(String.format("TRUNCATE TABLE %s.%s IMMEDIATE;", dbid, nodetable));
+    // ALTER TABLE linkdb0.nodetable ALTER COLUMN id RESTART WITH 1
+    stmt_ac1.execute(String.format("ALTER TABLE %s.%s ALTER COLUMN id " +
+                                   "RESTART WITH 1;", dbid, nodetable, startID));
   }
 
   String getDefaultPort() { return "50000"; }

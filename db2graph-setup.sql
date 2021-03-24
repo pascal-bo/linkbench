@@ -26,5 +26,5 @@ CREATE TABLE linkdb0.nodetable
     type    int       NOT NULL,
     version numeric   NOT NULL,
     time    int       NOT NULL,
-    data    text      NOT NULL
+    data    blob      NOT NULL
 );
