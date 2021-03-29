@@ -41,7 +41,7 @@ public class LinkStoreDb2sql extends LinkStoreSql {
     protected PreparedStatement makeAddLinkIncCountPS() throws SQLException {
         String sql = "MERGE INTO " + init_dbid + "." + counttable + " as current" +
                 " USING ( VALUES (?, ?, ?, ?, 0) ) as new (id, link_type, count, time, version)" +
-                " ON current.id = new.id" +
+                " ON current.id = new.id AND current.link_type = new.link_type" +
                 " WHEN MATCHED THEN" +
                 " UPDATE SET current.count = current.count + ?," +
                 " current.version = current.version + 1," +
@@ -97,7 +97,7 @@ public class LinkStoreDb2sql extends LinkStoreSql {
     protected boolean isDupKeyError(SQLException ex) {
         logger.trace("isDupKeyError for : " + ex +
                 " with state " + ex.getSQLState());
-        return ex.getSQLState().equals("23000");
+        return ex.getSQLState().equals("23505");
     }
 
     @Override

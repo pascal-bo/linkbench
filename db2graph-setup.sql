@@ -1,10 +1,10 @@
 CREATE TABLE linkdb0.linktable
 (
-    id1        bigint  NOT NULL DEFAULT '0' REFERENCES linkdb0.nodetable,
-    id2        bigint  NOT NULL DEFAULT '0' REFERENCES linkdb0.nodetable,
+    id1        bigint  NOT NULL DEFAULT '0',
+    id2        bigint  NOT NULL DEFAULT '0',
     link_type  bigint  NOT NULL DEFAULT '0',
     visibility smallint     NOT NULL DEFAULT '0',
-    data       varbinary(255) NOT NULL,
+    data       varbinary(255) NOT NULL DEFAULT BX'',
     time       bigint  NOT NULL DEFAULT '0',
     version    bigint       NOT NULL DEFAULT '0',
     PRIMARY KEY (link_type, id1, id2)
@@ -22,9 +22,10 @@ CREATE TABLE linkdb0.counttable
 
 CREATE TABLE linkdb0.nodetable
 (
-    id      bigint NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) PRIMARY KEY,
+    id      bigint NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1),
     type    int       NOT NULL,
     version numeric   NOT NULL,
     time    int       NOT NULL,
-    data    blob      NOT NULL
+    data    blob      NOT NULL,
+    PRIMARY KEY (id)
 );
