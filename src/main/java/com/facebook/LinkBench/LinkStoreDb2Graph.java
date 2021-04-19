@@ -119,8 +119,9 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.trace("getLink for id1=" + id1 + ", link_type=" + link_type +
                     ", id2=" + id2);
         }
-
         String upperCaseLinktableName = linktable.toUpperCase();
+
+        // TODO change to V().inE().outV() type query!
         List<Object> res = graphTraversalSource.V()
                 .has(upperCaseLinktableName,"ID1", id1)
                 .has(upperCaseLinktableName, "ID2", id2)
