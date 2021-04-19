@@ -86,8 +86,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         checkNodeTableConfigured();
         checkDbid(dbid);
 
-        graphTraversalSource.V().has(nodetable.toUpperCase(), "ID", id).values("ID", "")
-
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("getNode for id= " + id + " type=" + type);
 
