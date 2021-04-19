@@ -8,6 +8,7 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSo
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -106,11 +107,46 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         int resType = (int) resultList.get(4);
 
         if (resType != type) {
-            logger.warn("getNode found id=" + id + " with wrong type (" + type + " vs " + res.type);
+            logger.warn("getNode found id=" + id + " with wrong type (" + type + " vs " + resType);
             return null;
         }
 
         return new Node(resId, resType, resVersion, resTime, resData);
+    }
+
+    protected Link getLinkImpl(String dbid, long id1, long link_type, long id2) throws SQLException, IOException {
+        checkDbid(dbid);
+
+        if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
+            logger.trace("getLink for id1=" + id1 + ", link_type=" + link_type +
+                    ", id2=" + id2);
+        }
+
+        List<Object> res = graphTraversalSource.V()
+                .has("LINKTABLE","ID1", id1)
+                .has("LINKTABLE", "ID2", id2)
+                .has("LINKTABLE", "LINK_TYPE", link_type)
+                .values("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
+                .toList();
+
+        if (res.size() == 0) {
+            logger.trace("getLink found no row");
+            return null;
+        } else if (res.size() != 7) {
+            logger.warn("getNode id1=" + id1 + " id2=" + id2 + " link_type=" + link_type +
+                    " returns the wrong amount of information: expected=7, actual=" + res.size());
+            return null;
+        }
+
+        byte resVisibility = (byte) res.get(0);
+        long resLinkType = (long) res.get(1);
+        byte[] resData = ((String) res.get(2)).getBytes(StandardCharsets.US_ASCII);
+        long resId2 = (long) res.get(3);
+        long resId1 = (long) res.get(4);
+        long resVersion = (long) res.get(5);
+        long resTime = (long) res.get(6);
+
+        return new Link(resId1, resLinkType, resId2, resVisibility, resData, (int) resVersion, resTime);
     }
 
 }
