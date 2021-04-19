@@ -86,7 +86,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         checkNodeTableConfigured();
         checkDbid(dbid);
 
-        graphTraversalSource.V().has(, "ID", id).values("ID", "")
+        graphTraversalSource.V().has(nodetable.toUpperCase(), "ID", id).values("ID", "")
 
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("getNode for id= " + id + " type=" + type);
@@ -122,10 +122,11 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                     ", id2=" + id2);
         }
 
+        String upperCaseLinktableName = linktable.toUpperCase();
         List<Object> res = graphTraversalSource.V()
-                .has("LINKTABLE","ID1", id1)
-                .has("LINKTABLE", "ID2", id2)
-                .has("LINKTABLE", "LINK_TYPE", link_type)
+                .has(upperCaseLinktableName,"ID1", id1)
+                .has(upperCaseLinktableName, "ID2", id2)
+                .has(upperCaseLinktableName, "LINK_TYPE", link_type)
                 .values("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .toList();
 
