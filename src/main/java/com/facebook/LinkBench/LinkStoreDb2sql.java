@@ -262,11 +262,11 @@ public class LinkStoreDb2sql extends LinkStoreSql {
         }
     }
 
-    private void setBytesAsClob(PreparedStatement pstmt, int i, byte[] bytes) throws SQLException {
+    protected void setBytesAsClob(PreparedStatement pstmt, int i, byte[] bytes) throws SQLException {
         pstmt.setClob(i, new SerialClob(base64Encoder.encodeToString(bytes).toCharArray()));
     }
 
-    private byte[] getClobAsBytes(ResultSet rs, int i) throws SQLException, IOException {
+    protected byte[] getClobAsBytes(ResultSet rs, int i) throws SQLException, IOException {
         return base64Decoder.decode(rs.getClob(i).getAsciiStream().readAllBytes());
     }
 
@@ -430,11 +430,11 @@ public class LinkStoreDb2sql extends LinkStoreSql {
             pstmt.close();
     }
 
-    private void setBytesAsVarchar(PreparedStatement pstmt, int i, byte[] bytes) throws SQLException {
+    protected void setBytesAsVarchar(PreparedStatement pstmt, int i, byte[] bytes) throws SQLException {
         pstmt.setString(i, new String(bytes, StandardCharsets.US_ASCII));
     }
 
-    private byte[] getVarcharAsBytes(ResultSet rs, int i) throws SQLException, IOException {
+    protected byte[] getVarcharAsBytes(ResultSet rs, int i) throws SQLException, IOException {
         return rs.getString(i).getBytes(StandardCharsets.US_ASCII);
     }
 }
