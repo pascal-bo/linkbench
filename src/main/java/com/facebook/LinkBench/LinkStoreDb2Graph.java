@@ -61,9 +61,9 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         graphTrustStorePath = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_TRUST_STORE_PATH);
         graphTrustStorePwd = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_TRUST_STORE_PASSWORD);
 
-        nodelabel = ConfigUtil.getPropertyRequired(props, Config.COUNT_TABLE);
-        linklabel = ConfigUtil.getPropertyRequired(props, Config.COUNT_TABLE);
-        countlabel = ConfigUtil.getPropertyRequired(props, Config.COUNT_TABLE);
+        nodelabel = ConfigUtil.getPropertyRequired(props, CONFIG_NODE_LABEL);
+        linklabel = ConfigUtil.getPropertyRequired(props, CONFIG_LINK_LABEL);
+        countlabel = ConfigUtil.getPropertyRequired(props, CONFIG_COUNT_LABEL);
 
         try {
             openGraphConnection();
