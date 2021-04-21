@@ -89,6 +89,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
 
         // just a connection test, usually there are no Vertexes with TEST-Labels, thus it should return an empty list.
         graphTraversalSource.V().has("TEST").values().toList();
+        logger.trace("Established connection to db2graph.");
     }
 
     @Override
@@ -97,7 +98,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         checkDbid(dbid);
 
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
-            logger.trace("getNode for id= " + id + " type=" + type);
+            logger.trace("getNode for id= " + id + " type=" + type + " (graph)");
 
         List<Object> resultList = graphTraversalSource.V()
                 .has(nodelabel,"ID", 1)
@@ -128,7 +129,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
 
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("getLink for id1=" + id1 + ", link_type=" + link_type +
-                    ", id2=" + id2);
+                    ", id2=" + id2 + " (graph)");
         }
 
         List<Object> res = graphTraversalSource.E()
@@ -172,7 +173,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         checkDbid(dbid);
 
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
-            logger.trace("countLinks for id1=" + id1 + " and link_type=" + link_type);
+            logger.trace("countLinks for id1=" + id1 + " and link_type=" + link_type + " (graph)");
 
         List<Object> countList = graphTraversalSource.V()
                 .has(countlabel, "ID", id1)
