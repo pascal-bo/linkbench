@@ -93,6 +93,16 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     }
 
     @Override
+    public void close() {
+        super.close();
+        try {
+            graphTraversalSource.close();
+        } catch (Exception e) {
+            logger.error("Error while closing graph/gremlin connection: ", e);
+        }
+    }
+
+    @Override
     protected Node getNodeImpl(String dbid, int type, long id) throws SQLException, IOException {
         checkNodeTableConfigured();
         checkDbid(dbid);
