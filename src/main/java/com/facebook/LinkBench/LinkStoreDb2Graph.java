@@ -9,6 +9,7 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSo
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
@@ -46,6 +47,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     protected String graphTrustStorePath = "";
     protected String graphTrustStorePwd = "";
     protected GraphTraversalSource graphTraversalSource;
+    protected Cluster graphCluster;
 
     public LinkStoreDb2Graph() {
         super();
@@ -82,7 +84,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
      * Creates a connection to the db2 graph server.
      */
     protected void openGraphConnection() {
-        Cluster graphCluster = Cluster.build()
+        graphCluster = Cluster.build()
                 .addContactPoint(graphHost)
                 .credentials(graphUser, graphPwd)
                 .trustStore(graphTrustStorePath)
@@ -103,6 +105,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         super.close();
         try {
             graphTraversalSource.close();
+            graphCluster.close();
         } catch (Exception e) {
             logger.error("Error while closing graph/gremlin connection: ", e);
         }
@@ -173,10 +176,11 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("countLinks for id1=" + id1 + " and link_type=" + link_type + " (graph)");
 
-        List<Object> countList = graphTraversalSource.V()
-                .has(countlabel, "ID", id1)
-                .has(countlabel, "LINK_TYPE", link_type)
-                .values("COUNT").toList();
+        var countList = graphTraversalSource.E()
+                .hasLabel(linklabel)
+                .has("ID1", id1)
+                .has("LINK_TYPE", link_type)
+                .count().toList();
 
         if (countList.size() == 0) {
             logger.trace("countLinks found no row");
@@ -186,7 +190,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                     " and link_type=" + link_type + ": " + countList);
             throw new RuntimeException("Unexpected situation found more than one count for id1 link_type combination");
         }
-        return (long) countList.get(0);
+        return countList.get(0);
     }
 
     @Override
@@ -278,5 +282,99 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         return link;
     }
 
+    @Override
+    protected void addBulkCountsImpl(String dbid, List<LinkCount> counts) throws SQLException {
+        logger.trace("Skipping adding a count because db2graph does not require a seperate table.");
+    }
 
+    @Override
+    protected LinkWriteResult updateLinkImpl(String dbid, Link l, boolean noinverse) throws SQLException {
+        checkDbid(dbid);
+
+        if (Level.TRACE.isGreaterOrEqual(debuglevel))
+            logger.trace("updateLink " + l.id1 + "." + l.id2 + "." + l.link_type);
+
+        // Read and lock the row in Link
+        int visibility = getVisibilityForUpdate(l.id1, l.link_type, l.id2, "updateLink");
+
+        if (visibility == VISIBILITY_NOT_FOUND) {
+            // Row doesn't exist
+            logger.trace("updateLink row not found");
+            conn_ac0.rollback();
+            return LinkWriteResult.LINK_NOT_DONE;
+        }
+
+        // Update the row in Link
+        pstmt_update_link_upd_link.setByte(1, l.visibility);
+        setBytesAsVarchar(pstmt_update_link_upd_link, 2, l.data);
+        pstmt_update_link_upd_link.setInt(3, l.version);
+        pstmt_update_link_upd_link.setLong(4, l.time);
+        pstmt_update_link_upd_link.setLong(5, l.id1);
+        pstmt_update_link_upd_link.setLong(6, l.id2);
+        pstmt_update_link_upd_link.setLong(7, l.link_type);
+
+        int res = pstmt_update_link_upd_link.executeUpdate();
+        if (res == 0) {
+            logger.trace("updateLink row not changed");
+            conn_ac0.rollback();
+            return LinkWriteResult.LINK_NO_CHANGE;
+        } else if (res != 1) {
+            String s = "updateLink update failed with res=" + res +
+                    " for id1=" + l.id1 + " id2=" + l.id2 + " link_type=" + l.link_type;
+            logger.error(s);
+            conn_ac0.rollback();
+            throw new RuntimeException(s);
+        }
+
+        conn_ac0.commit();
+
+        if (check_count)
+            testCount(dbid, linktable, counttable, l.id1, l.link_type);
+
+        return LinkWriteResult.LINK_UPDATE;
+    }
+
+    protected boolean deleteLinkImpl(String dbid, long id1, long link_type, long id2,
+                                     boolean noinverse, boolean expunge) throws SQLException {
+        checkDbid(dbid);
+
+        if (Level.TRACE.isGreaterOrEqual(debuglevel))
+            logger.trace("deleteLink " + id1 + "." + id2 + "." + link_type);
+
+        int visibility = getVisibilityForUpdate(id1, link_type, id2, "deleteLink");
+        boolean found = (visibility != VISIBILITY_NOT_FOUND);
+
+        if (!found || (visibility == VISIBILITY_HIDDEN && !expunge)) {
+            logger.trace("deleteLinkImpl row not found");
+            conn_ac0.rollback();
+            return found;
+        }
+
+        // either delete or mark the link as hidden
+        PreparedStatement wstmt;
+        if (!expunge)
+            wstmt = pstmt_delete_link_upd_link;
+        else
+            wstmt = pstmt_delete_link_del_link;
+
+        wstmt.setLong(1, id1);
+        wstmt.setLong(2, id2);
+        wstmt.setLong(3, link_type);
+
+        int update_res = wstmt.executeUpdate();
+        if (update_res != 1) {
+            String s = "deleteLink update link failed for id1=" + id1 +
+                    " id2=" + id2 + " link_type=" + link_type;
+            logger.error(s);
+            conn_ac0.rollback();
+            throw new RuntimeException(s);
+        }
+
+        conn_ac0.commit();
+
+        if (check_count)
+            testCount(dbid, linktable, counttable, id1, link_type);
+
+        return found;
+    }
 }
