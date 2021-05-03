@@ -10,14 +10,12 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalSource.traversal;
-import static org.apache.tinkerpop.gremlin.process.traversal.Order.asc;
 import static org.apache.tinkerpop.gremlin.process.traversal.Order.desc;
 import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.unfold;
 
@@ -94,7 +92,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .serializer(new GraphBinaryMessageSerializerV1())
                 .create();
         graphTraversalSource = traversal().withRemote(DriverRemoteConnection.using(graphCluster, graphName));
-
         // just a connection test, usually there are no Vertexes with TEST-Labels, thus it should return an empty list.
         graphTraversalSource.V().has("TEST").values().toList();
         logger.trace("Established connection to db2graph.");
@@ -104,8 +101,8 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     public void close() {
         super.close();
         try {
-            graphTraversalSource.close();
-            graphCluster.close();
+            if (graphTraversalSource != null) graphTraversalSource.close();
+            if (graphCluster != null) graphCluster.close();
         } catch (Exception e) {
             logger.error("Error while closing graph/gremlin connection: ", e);
         }
@@ -376,5 +373,16 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             testCount(dbid, linktable, counttable, id1, link_type);
 
         return found;
+    }
+
+    @Override
+    public void resetNodeStore(String dbid, long startID) throws SQLException {
+        checkNodeTableConfigured();
+        // Truncate table deletes all data and allows us to reset autoincrement
+        stmt_ac1.execute(String.format("TRUNCATE TABLE %s.%s IMMEDIATE;", dbid, linktable));
+        stmt_ac1.execute(String.format("TRUNCATE TABLE %s.%s IMMEDIATE;", dbid, nodetable));
+        // ALTER TABLE linkdb0.nodetable ALTER COLUMN id RESTART WITH 1
+        stmt_ac1.execute(String.format("ALTER TABLE %s.%s ALTER COLUMN id " +
+                "RESTART WITH 1;", dbid, nodetable, startID));
     }
 }
