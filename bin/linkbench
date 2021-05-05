@@ -50,7 +50,7 @@ fi
 
 echo "Using java at: $JAVA"
 
-JAVA_HEAP_MAX=-Xmx1000m
+JAVA_HEAP_MAX=-Xmx4000m
 
 # check envvars which might override default args
 if [ "$HEAPSIZE" != "" ]; then
