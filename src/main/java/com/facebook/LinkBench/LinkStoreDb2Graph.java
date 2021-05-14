@@ -167,8 +167,9 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.trace("countLinks for id1=" + id1 + " and link_type=" + link_type + " (graph)");
 
         var countList = graphTraversalSource.E()
-                .has(linklabel, "ID1", id1)
-                .has(linklabel, "LINK_TYPE", link_type)
+                .hasLabel(linklabel)
+                .has("ID1", id1)
+                .has("LINK_TYPE", link_type)
                 .count().toList();
 
         if (countList.size() == 0) {
@@ -192,10 +193,10 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
 
         Long[] id2sBoxed = LongStream.of(id2s).boxed().toArray(Long[]::new);
 
-        List<Map<Object, Object>> linkValues = graphTraversalSource.E()
-                .has(linklabel, "ID1", id1)
-                .has(linklabel, "ID2", P.within(id2sBoxed))
-                .has(linklabel, "LINK_TYPE", link_type)
+        List<Map<Object, Object>> linkValues = graphTraversalSource.E().hasLabel(linklabel)
+                .has("ID1", id1)
+                .has("ID2", P.within(id2sBoxed))
+                .has("LINK_TYPE", link_type)
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .by(unfold())
                 .toList();
@@ -225,10 +226,11 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
 
         List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E()
-                .has(linklabel, "ID1", id1)
-                .has(linklabel, "LINK_TYPE", link_type)
-                .has(linklabel, "TIME", P.gte(minTimestamp))
-                .has(linklabel, "TIME", P.lte(maxTimestamp))
+                .has(linklabel)
+                .has("ID1", id1)
+                .has("LINK_TYPE", link_type)
+                .has("TIME", P.gte(minTimestamp))
+                .has("TIME", P.lte(maxTimestamp))
                 .order().by("TIME", desc)
                 .range(offset, offset + limit)
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
