@@ -114,7 +114,8 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.trace("getNode for id= " + id + " type=" + type + " (graph)");
 
         List<Object> resultValues = graphTraversalSource.V()
-                .has(nodelabel,"ID", 1)
+                .hasLabel(nodelabel)
+                .has("ID", 1)
                 .values("ID", "TYPE", "VERSION", "TIME", "DATA")
                 .toList();
 
@@ -142,9 +143,10 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
 
         List<Object> resultValues = graphTraversalSource.E()
-                .has(linklabel, "ID2", id1)
-                .has(linklabel, "ID1", id2)
-                .has(linklabel, "LINK_TYPE", link_type)
+                .hasLabel(linklabel)
+                .has("ID2", id1)
+                .has("ID1", id2)
+                .has("LINK_TYPE", link_type)
                 .values("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .toList();
 
@@ -226,7 +228,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
 
         List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E()
-                .has(linklabel)
+                .hasLabel(linklabel)
                 .has("ID1", id1)
                 .has("LINK_TYPE", link_type)
                 .has("TIME", P.gte(minTimestamp))
