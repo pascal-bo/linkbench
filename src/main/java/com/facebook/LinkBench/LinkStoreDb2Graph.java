@@ -113,17 +113,18 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("getNode for id= " + id + " type=" + type + " (graph)");
 
-        List<Object> resultValues = graphTraversalSource.V()
-                .hasLabel(nodelabel)
-                .has("ID", 1)
-                .values("ID", "TYPE", "VERSION", "TIME", "DATA")
+        List<Map<Object, Object>> nodeValueMaps = graphTraversalSource.V()
+                .has(nodelabel,"ID", 1)
+                .valueMap("ID", "TYPE", "VERSION", "TIME", "DATA")
+                .by(unfold())
                 .toList();
 
-        if (resultValues.size() != 5) {
+        if (nodeValueMaps.size() != 1) {
             return null;
         }
 
-        Node node = resultToNode(resultValues);
+        Map<Object, Object> nodeValueMap = nodeValueMaps.get(0);
+        Node node = valueMapToNode(nodeValueMap);
 
         if (node.type != type) {
             logger.warn("getNode found id=" + id + " with wrong type (" + type + " vs " + type);
@@ -142,23 +143,24 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                     ", id2=" + id2 + " (graph)");
         }
 
-        List<Object> resultValues = graphTraversalSource.E()
-                .hasLabel(linklabel)
-                .has("ID2", id1)
-                .has("ID1", id2)
-                .has("LINK_TYPE", link_type)
-                .values("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
+        List<Map<Object, Object>> linkValues = graphTraversalSource.E()
+                .has(linklabel, "ID2", id1)
+                .has(linklabel, "ID1", id2)
+                .has(linklabel, "LINK_TYPE", link_type)
+                .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
+                .by(unfold())
                 .toList();
 
-        if (resultValues.size() == 0) {
+        if (linkValues.size() == 0) {
             logger.trace("getLink found no row");
             return null;
-        } else if (resultValues.size() > 7) {
+        } else if (linkValues.size() > 1) {
             logger.warn("getNode id1=" + id1 + " id2=" + id2 + " link_type=" + link_type +
-                    " returns the wrong amount of information: expected=1, actual=" + resultValues.size());
+                    " returns the wrong amount of information: expected=1, actual=" + linkValues.size());
             return null;
         }
-        return resultToLink(resultValues);
+        Map<Object, Object> linkValueMap = linkValues.get(0);
+        return valueMapToLink(linkValueMap);
     }
 
     @Override
@@ -251,27 +253,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.trace("getLinkList found no row");
             return null;
         }
-    }
-
-    private Node resultToNode(List<Object> results) {
-        byte[] data = base64Decoder.decode((String) results.get(0));
-        long version = ((BigDecimal) results.get(1)).longValue();
-        int time = (int) results.get(2);
-        long id = (long) results.get(3);
-        int type = (int) results.get(4);
-        return new Node(id, type, version, time, data);
-    }
-
-    private Link resultToLink(List<Object> results) {
-        Link link = new Link();
-        link.visibility = (byte) ((int) results.get(0));
-        link.link_type = (long) results.get(1);
-        link.data = ((String) results.get(2)).getBytes(StandardCharsets.US_ASCII);
-        link.id2 = (long) results.get(3);
-        link.id1 = (long) results.get(4);
-        link.version = (int) ((long) results.get(5));
-        link.time = (long) results.get(6);
-        return link;
     }
 
     private Node valueMapToNode(Map<Object, Object> valueMap) {
