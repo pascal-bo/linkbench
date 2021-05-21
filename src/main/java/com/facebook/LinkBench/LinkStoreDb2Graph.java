@@ -116,7 +116,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         List<Map<Object, Object>> nodeValueMaps = graphTraversalSource.V()
                 .hasLabel(nodelabel)
                 .has("ID", id)
-                .has("TYPE", type)
                 .valueMap("ID", "TYPE", "VERSION", "TIME", "DATA")
                 .by(unfold())
                 .toList();
