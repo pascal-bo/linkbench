@@ -208,7 +208,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .toList();
 
         List<Link> links = linkValues.stream()
-                .parallel()
                 .map(this::valueMapToLink)
                 .collect(Collectors.toList());
 
@@ -245,7 +244,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .toList();
 
         List<Link> links = linkValueMaps.stream()
-                .parallel()
                 .map(this::valueMapToLink)
                 .collect(Collectors.toList());
 
