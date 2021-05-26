@@ -193,7 +193,10 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.trace("multigetLinks for id1=" + id1 + " and link_type=" + link_type + " and id2s " +
                     Arrays.toString(id2s) + " (graph)");
 
-        Long[] id2sBoxed = LongStream.of(id2s).boxed().toArray(Long[]::new);
+        Long[] id2sBoxed = new Long[id2s.length];
+        for (int i = 0; i < id2s.length; i++) {
+            id2sBoxed[i] = id2s[i];
+        }
 
         List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E().hasLabel(linklabel)
                 .has("ID1", id1)
@@ -203,7 +206,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .by(unfold())
                 .toList();
 
-        var links = new Link[linkValueMaps.size()];
+        Link[] links = new Link[linkValueMaps.size()];
 
         for (int i = 0; i < linkValueMaps.size(); i++) {
             links[i] = valueMapToLink(linkValueMaps.get(i));
@@ -241,7 +244,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .by(unfold())
                 .toList();
 
-        var links = new Link[linkValueMaps.size()];
+        Link[] links = new Link[linkValueMaps.size()];
 
         for (int i = 0; i < linkValueMaps.size(); i++) {
             links[i] = valueMapToLink(linkValueMaps.get(i));
