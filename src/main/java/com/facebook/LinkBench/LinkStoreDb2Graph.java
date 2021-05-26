@@ -195,7 +195,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
 
         Long[] id2sBoxed = LongStream.of(id2s).boxed().toArray(Long[]::new);
 
-        List<Map<Object, Object>> linkValues = graphTraversalSource.E().hasLabel(linklabel)
+        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E().hasLabel(linklabel)
                 .has("ID1", id1)
                 .has("ID2", P.within(id2sBoxed))
                 .has("LINK_TYPE", link_type)
@@ -203,14 +203,16 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .by(unfold())
                 .toList();
 
-        List<Link> links = linkValues.stream()
-                .map(this::valueMapToLink)
-                .collect(Collectors.toList());
+        var links = new Link[linkValueMaps.size()];
 
-        if (links.size() > 0) {
+        for (int i = 0; i < linkValueMaps.size(); i++) {
+            links[i] = valueMapToLink(linkValueMaps.get(i));
+        }
+
+        if (links.length > 0) {
             if (Level.TRACE.isGreaterOrEqual(debuglevel))
-                logger.trace("multigetLinks found " + links.size() + " rows ");
-            return links.toArray(new Link[links.size()]);
+                logger.trace("multigetLinks found " + links.length + " rows ");
+            return links;
         } else {
             logger.trace("multigetLinks row not found");
             return new Link[0];
@@ -239,14 +241,16 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .by(unfold())
                 .toList();
 
-        List<Link> links = linkValueMaps.stream()
-                .map(this::valueMapToLink)
-                .collect(Collectors.toList());
+        var links = new Link[linkValueMaps.size()];
 
-        if (links.size() > 0) {
+        for (int i = 0; i < linkValueMaps.size(); i++) {
+            links[i] = valueMapToLink(linkValueMaps.get(i));
+        }
+
+        if (links.length > 0) {
             if (Level.TRACE.isGreaterOrEqual(debuglevel))
-                logger.trace("getLinkList found " + links.size() + " rows ");
-            return links.toArray(new Link[links.size()]);
+                logger.trace("getLinkList found " + links.length + " rows ");
+            return links;
         } else {
             logger.trace("getLinkList found no row");
             return null;
