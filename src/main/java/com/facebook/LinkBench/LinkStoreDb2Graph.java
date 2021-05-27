@@ -145,6 +145,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
 
         List<Map<Object, Object>> linkValues = graphTraversalSource.E()
+                .hasLabel(linklabel)
                 .has(linklabel, "LINK_TYPE", link_type)
                 .has(linklabel, "ID1", id1)
                 .has(linklabel, "ID2", id2)
@@ -201,7 +202,8 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             id2sBoxed[i] = id2s[i];
         }
 
-        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E().hasLabel(linklabel)
+        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E()
+                .hasLabel(linklabel)
                 .has("ID1", id1)
                 .has("ID2", P.within(id2sBoxed))
                 .has("LINK_TYPE", link_type)
