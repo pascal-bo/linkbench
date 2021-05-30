@@ -300,12 +300,12 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     }
 
     private Map<Object, Object> createNodeId(String dbid, String label, Long id) {
-        return Map.of("prefix", String.format("%s.%s", dbid, label), "idCols", Collections.singletonList(id));
+        return Map.of("prefix", String.format("%s.%s", dbid.toUpperCase(), label.toUpperCase()), "idCols", Collections.singletonList(id));
     }
 
     private Map<Object, Object> createLinkId(String dbid, String label, Long link_type,  Long id1, Long id2){
         return Map.of(
-                "prefix", String.format("%s.%s", dbid, label),
+                "prefix", String.format("%s.%s", dbid.toUpperCase(), label.toUpperCase()),
                 "idCols", Arrays.asList(link_type, id1, id2)
         );
     }
