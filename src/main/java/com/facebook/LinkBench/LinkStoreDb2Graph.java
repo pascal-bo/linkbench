@@ -234,11 +234,10 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
 
         List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E()
-                .has(linklabel)
+                .hasLabel(linklabel)
                 .has("ID1", id1)
                 .has("LINK_TYPE", link_type)
-                .has("TIME", P.gte(minTimestamp))
-                .has("TIME", P.lte(maxTimestamp))
+                .has("TIME", P.between(minTimestamp, maxTimestamp))
                 .order().by("TIME", desc)
                 .range(offset, offset + limit)
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
