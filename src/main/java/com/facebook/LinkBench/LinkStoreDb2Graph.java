@@ -5,6 +5,8 @@ import org.apache.tinkerpop.gremlin.driver.remote.DriverRemoteConnection;
 import org.apache.tinkerpop.gremlin.driver.ser.GraphBinaryMessageSerializerV1;
 import org.apache.tinkerpop.gremlin.process.traversal.P;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
+import org.apache.tinkerpop.gremlin.structure.Edge;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -12,11 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalSource.traversal;
 import static org.apache.tinkerpop.gremlin.process.traversal.Order.desc;
+import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.outV;
 import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.unfold;
 
 public class LinkStoreDb2Graph extends LinkStoreDb2sql{
@@ -113,9 +114,10 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("getNode for id= " + id + " type=" + type + " (graph)");
 
-        List<Object> resultValues = graphTraversalSource.V()
+        Map<Object, Object> nodeId = createNodeId(dbid, nodelabel, id);
+
+        List<Object> resultValues = graphTraversalSource.V(nodeId)
                 .hasLabel(nodelabel)
-                .has("ID", id)
                 .values("ID", "TYPE", "VERSION", "TIME", "DATA")
                 .toList();
 
@@ -142,11 +144,10 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                     ", id2=" + id2 + " (graph)");
         }
 
-        List<Object> resultValues = graphTraversalSource.E()
+        Map<Object, Object> linkId = createLinkId(dbid, linklabel, link_type, id1, id2);
+
+        List<Object> resultValues = graphTraversalSource.E(linkId)
                 .hasLabel(linklabel)
-                .has("ID1", id1)
-                .has("ID2", id2)
-                .has("LINK_TYPE", link_type)
                 .values("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .toList();
 
@@ -168,11 +169,12 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("countLinks for id1=" + id1 + " and link_type=" + link_type + " (graph)");
 
-        var countList = graphTraversalSource.E()
-                .hasLabel(linklabel)
-                .has("ID1", id1)
-                .has("LINK_TYPE", link_type)
-                .count().toList();
+        var nodeId1 = createNodeId(dbid, nodelabel, id1);
+
+        var countList = graphTraversalSource.V(nodeId1)
+                .outE(linklabel)
+                .count()
+                .toList();
 
         if (countList.size() == 0) {
             logger.trace("countLinks found no row");
@@ -198,11 +200,9 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             id2sBoxed[i] = id2s[i];
         }
 
-        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E()
-                .hasLabel(linklabel)
-                .has("ID1", id1)
-                .has("ID2", P.within(id2sBoxed))
-                .has("LINK_TYPE", link_type)
+        var linkId = createLinkId(dbid, linklabel, link_type, id1, id2s[0]);
+
+        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E(linkId)
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .by(unfold())
                 .toList();
@@ -233,13 +233,10 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                     " offset=" + offset + ", limit=" + limit + " (graph)");
         }
 
-        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E()
-                .hasLabel(linklabel)
-                .has("ID1", id1)
-                .has("LINK_TYPE", link_type)
-                .has("TIME", P.between(minTimestamp, maxTimestamp))
-                .order().by("TIME", desc)
-                .range(offset, offset + limit)
+        var nodeId1 = createNodeId(dbid, nodelabel, id1);
+
+        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.V(nodeId1)
+                .outE(linklabel)
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .by(unfold())
                 .toList();
@@ -300,6 +297,17 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         link.time = (long) valueMap.get("TIME");
         link.version = (int) ((long) valueMap.get("VERSION"));
         return link;
+    }
+
+    private Map<Object, Object> createNodeId(String dbid, String label, Long id) {
+        return Map.of("prefix", String.format("%s.%s", dbid.toUpperCase(), label.toUpperCase()), "idCols", Collections.singletonList(id));
+    }
+
+    private Map<Object, Object> createLinkId(String dbid, String label, Long link_type,  Long id1, Long id2){
+        return Map.of(
+                "prefix", String.format("%s.%s", dbid.toUpperCase(), label.toUpperCase()),
+                "idCols", Arrays.asList(link_type, id1, id2)
+        );
     }
 
     @Override
