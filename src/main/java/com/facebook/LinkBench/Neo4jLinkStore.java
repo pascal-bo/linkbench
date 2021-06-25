@@ -3,6 +3,7 @@ package com.facebook.LinkBench;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang.NotImplementedException;
 import org.neo4j.driver.*;
 import org.neo4j.driver.exceptions.Neo4jException;
 
@@ -46,8 +47,10 @@ public class Neo4jLinkStore extends GraphStore {
 
     }
 
+    /* Node operations */
+
     @Override
-    public long addNode(String dbid, Node node) throws Neo4jException {
+    public long addNode(String dbid, Node node) throws Exception {
         try {
             long[] ids = bulkAddNodesImpl(dbid, Collections.singletonList(node));
             if (ids.length != 1) {
@@ -63,7 +66,7 @@ public class Neo4jLinkStore extends GraphStore {
     }
 
     @Override
-    public long[] bulkAddNodes(String dbid, List<Node> nodes) throws Neo4jException {
+    public long[] bulkAddNodes(String dbid, List<Node> nodes) throws Exception {
         try {
             return bulkAddNodesImpl(dbid, nodes);
         } catch (Neo4jException ex) {
@@ -107,7 +110,7 @@ public class Neo4jLinkStore extends GraphStore {
     }
 
     @Override
-    public Node getNode(String dbid, int type, long id) throws Neo4jException {
+    public Node getNode(String dbid, int type, long id) throws Exception {
         try {
             return getNodeImpl(dbid, type, id);
         } catch (Neo4jException ex) {
@@ -140,7 +143,7 @@ public class Neo4jLinkStore extends GraphStore {
     }
 
     @Override
-    public boolean updateNode(String dbid, Node node) throws Neo4jException {
+    public boolean updateNode(String dbid, Node node) throws Exception {
         try {
             return updateNodeImpl(dbid, node);
         } catch (Neo4jException ex) {
@@ -180,7 +183,7 @@ public class Neo4jLinkStore extends GraphStore {
         }
     }
 
-    public boolean deleteNodeImpl(String dbid, int type, long id) {
+    public boolean deleteNodeImpl(String dbid, int type, long id) throws Neo4jException {
         long deletedNodeCount = connection.writeTransaction(tx -> {
             tx.run("MATCH (:node{id: $id})-[l:link]-() DELETE l", Map.of("id", id)).list();
             return tx.run("MATCH (x:node{id: $id}) " +
@@ -198,51 +201,61 @@ public class Neo4jLinkStore extends GraphStore {
         throw new RuntimeException("Deleted multiple nodes instead of one.");
     }
 
+    /* Link operations */
+
     @Override
     public LinkWriteResult addLink(String dbid, Link a, boolean noinverse) throws Exception {
-        return null;
+        // TODO implement newLinkLoop
+        throw new NotImplementedException();
     }
 
-    @Override
-    public boolean deleteLink(String dbid, long id1, long link_type, long id2, boolean noinverse, boolean expunge) throws Exception {
-        return false;
-    }
-
-    @Override
-    public LinkWriteResult updateLink(String dbid, Link a, boolean noinverse) throws Exception {
-        return null;
-    }
-
-    @Override
-    public Link getLink(String dbid, long id1, long link_type, long id2) throws Exception {
-        return null;
-    }
-
-    @Override
-    public Link[] getLinkList(String dbid, long id1, long link_type) throws Exception {
-        return new Link[0];
-    }
-
-    @Override
-    public Link[] getLinkList(String dbid, long id1, long link_type, long minTimestamp, long maxTimestamp, int offset, int limit) throws Exception {
-        return new Link[0];
-    }
-
-    @Override
-    public long countLinks(String dbid, long id1, long link_type) throws Exception {
-        return 0;
+    public void addLinkImpl(Link link) throws Neo4jException {
+        addBulkLinksImpl("", Collections.singletonList(link), true);
     }
 
     @Override
     public void addBulkLinks(String dbid, List<Link> a, boolean noinverse) throws Exception {
-        super.addBulkLinks(dbid, a, noinverse);
+        try {
+            addBulkLinksImpl(dbid, a, false);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "addBulkLinks");
+            throw ex;
+        }
     }
 
-    public void addLinkImpl(Link link) {
-        addBulkLinksImpl("", Collections.singletonList(link), true);
+    public void addBulkLinksImpl(String dbid, List<Link> links, boolean noinverse) throws Neo4jException {
+        long createdLinkCount = connection.writeTransaction(tx ->
+                links.stream().map(l -> tx.run(
+                        "MATCH (n1:node{id:$id1}), (n2:node{id:$id2}) CREATE (n1)-" +
+                                "[l:link{link_type: $link_type, visibility: $visibility, " +
+                                "data: $data, time: $time, version: $version}]" +
+                                "->(n2) RETURN COUNT(l) AS COUNT",
+                        Map.of(
+                                "id1", l.id1,
+                                "id2", l.id2,
+                                "link_type", l.link_type,
+                                "visibility", l.visibility,
+                                "data", l.data,
+                                "time", l.time,
+                                "version", l.version
+                        )).single()
+                ).mapToLong(rec -> rec.get("COUNT").asLong()).sum()
+        );
+        if (createdLinkCount != links.size()) {
+            String s = "addBulkLinks insert of " + links.size() + " links" +
+                    " returned " + createdLinkCount;
+            logger.error(s);
+            throw new RuntimeException(s);
+        }
     }
 
-    public boolean updateLinkImpl(Link link) {
+    @Override
+    public LinkWriteResult updateLink(String dbid, Link a, boolean noinverse) throws Exception {
+        // TODO implement newLinkLoop
+        throw new NotImplementedException();
+    }
+
+    public boolean updateLinkImpl(Link link) throws Neo4jException {
         long updateLinkCount = connection.writeTransaction(tx ->
                 tx.run(
                         "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]-(n2:node{id: $id2}) SET " +
@@ -270,8 +283,19 @@ public class Neo4jLinkStore extends GraphStore {
         throw new RuntimeException("Updated multiple links but should have one.");
     }
 
-    public boolean deleteLinkImpl(String dbid, long id1, long link_type, long id2) {
-         long deletedLinkCount = connection.writeTransaction(tx ->
+    @Override
+    public boolean deleteLink(String dbid, long id1, long link_type, long id2, boolean noinverse, boolean expunge) throws Exception {
+        try {
+            return deleteLinkImpl(dbid, id1, link_type, id2);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "deleteLink");
+            throw ex;
+        }
+    }
+
+    public boolean deleteLinkImpl(String dbid, long id1, long link_type, long id2) throws Neo4jException {
+        // TODO update query tom support count
+        long deletedLinkCount = connection.writeTransaction(tx ->
                 tx.run(
                         "MATCH (:node{id: $id, type: $type})-[l:link]-() DELETE l",
                         Map.of(
@@ -281,15 +305,26 @@ public class Neo4jLinkStore extends GraphStore {
                         )
                 ).single().get("COUNT").asLong());
 
-         if (deletedLinkCount == 0) {
-             return false;
-         } else if (deletedLinkCount == 1) {
-             return true;
-         }
-         throw new RuntimeException("Deleted multiple links but should have one.");
+        if (deletedLinkCount == 0) {
+            return false;
+        } else if (deletedLinkCount == 1) {
+            return true;
+        }
+        // TODO evaluate if this is a good idea...
+        throw new RuntimeException("Deleted multiple links but should have one.");
     }
 
-    public Link getLinkImpl(String dbid, long id1, long id2, long link_type) {
+    @Override
+    public Link getLink(String dbid, long id1, long link_type, long id2) throws Exception {
+        try {
+            return getLinkImpl(dbid, id1, link_type, id2);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "getLink");
+            throw ex;
+        }
+    }
+
+    public Link getLinkImpl(String dbid, long id1, long id2, long link_type) throws Neo4jException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("getLink for id1=" + id1 + ", link_type=" + link_type + ", id2=" + id2);
         }
@@ -318,7 +353,17 @@ public class Neo4jLinkStore extends GraphStore {
         return recordToLink(results.get(0));
     }
 
-    public Link[] multigetLinksImpl(long id1, long link_type, long[] id2s) {
+    @Override
+    public Link[] multigetLinks(String dbid, long id1, long link_type, long[] id2s) throws Exception {
+        try {
+            return multigetLinksImpl(id1, link_type, id2s);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "multigetLinks");
+            throw ex;
+        }
+    }
+
+    public Link[] multigetLinksImpl(long id1, long link_type, long[] id2s) throws Neo4jException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("multigetLinks for id1=" + id1 + " and link_type=" + link_type + " and id2s " +
                     Arrays.toString(id2s));
@@ -345,7 +390,33 @@ public class Neo4jLinkStore extends GraphStore {
         return new Link[]{recordToLink(results.get(0))};
     }
 
-    public long countLinksImpl(long id1, long link_type) {
+    @Override
+    public Link[] getLinkList(String dbid, long id1, long link_type) throws Exception {
+        return getLinkList(dbid, id1, link_type, 0, Long.MAX_VALUE, 0, rangeLimit);
+    }
+
+    @Override
+    public Link[] getLinkList(String dbid, long id1, long link_type, long minTimestamp, long maxTimestamp, int offset, int limit) throws Exception {
+        try {
+            // TODO implement getLinkListImpl
+            throw new NotImplementedException();
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "getLinkList");
+            throw ex;
+        }
+    }
+
+    @Override
+    public long countLinks(String dbid, long id1, long link_type) throws Exception {
+        try {
+            return countLinksImpl(id1, link_type);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "multigetLinks");
+            throw ex;
+        }
+    }
+
+    public long countLinksImpl(long id1, long link_type) throws Neo4jException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("countLinks for id= " + id1 + " link_type=" + link_type);
 
@@ -365,26 +436,6 @@ public class Neo4jLinkStore extends GraphStore {
         }
 
         return linkCount;
-    }
-
-    public void addBulkLinksImpl(String dbid, List<Link> links, boolean noinverse) {
-        connection.writeTransaction(tx ->
-                links.stream().map(l -> tx.run(
-                        "MATCH (n1:node{id:$id1}), (n2:node{id:$id2}) CREATE (n1)-" +
-                        "[l:link{link_type: $link_type, visibility: $visibility, " +
-                        "data: $data, time: $time, version: $version}]" +
-                        "->(n2)",
-                        Map.of(
-                                "id1", l.id1,
-                                "id2", l.id2,
-                                "link_type", l.link_type,
-                                "visibility", l.visibility,
-                                "data", l.data,
-                                "time", l.time,
-                                "version", l.version
-                        )).single()
-                ).collect(Collectors.toList())
-        );
     }
 
     @Override
