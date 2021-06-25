@@ -47,28 +47,155 @@ public class Neo4jLinkStore extends GraphStore {
     }
 
     @Override
-    public long addNode(String dbid, Node node) throws Exception {
-        return 0;
+    public long addNode(String dbid, Node node) throws Neo4jException {
+        try {
+            long[] ids = bulkAddNodesImpl(dbid, Collections.singletonList(node));
+            if (ids.length != 1) {
+                String errorText = "addNode for " + node.id + " expected 1 returned " + ids.length;
+                logger.error(errorText);
+                throw new RuntimeException(errorText);
+            }
+            return ids[0];
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "addNode");
+            throw ex;
+        }
     }
 
     @Override
-    public Node getNode(String dbid, int type, long id) throws Exception {
-        return null;
+    public long[] bulkAddNodes(String dbid, List<Node> nodes) throws Neo4jException {
+        try {
+            return bulkAddNodesImpl(dbid, nodes);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "bulkAddNodes");
+            throw ex;
+        }
+    }
+
+    public long[] bulkAddNodesImpl(String dbid, List<Node> nodes) throws Neo4jException {
+        if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
+            logger.trace("bulkAddNodes for " + nodes.size() + " nodes");
+        }
+
+        List<Long> results = connection.writeTransaction(tx ->
+                nodes.stream().map(node ->
+                        tx.run("CREATE (n:node{id: $id, type: $type, version: $version, time: $time, data: $data}) " +
+                                        "RETURN n.id AS ID",
+                                Map.of(
+                                        "id", node.id,
+                                        "type", node.type,
+                                        "version", node.version,
+                                        "time", node.time,
+                                        "data", node.data
+                                )
+                        ).single()
+                ).map(rec -> rec.get("ID").asLong()).collect(Collectors.toList())
+        );
+
+        if (results.size() != nodes.size()) {
+            String s = "bulkAddNodes insert for " + nodes.size() +
+                    " returned " + results.size() + " with generated keys";
+            logger.error(s);
+            throw new RuntimeException(s);
+        }
+
+        long[] newIds = new long[results.size()];
+        for (int i = 0; i < results.size(); i++) {
+            newIds[i] = results.get(i);
+        }
+        return newIds;
     }
 
     @Override
-    public boolean updateNode(String dbid, Node node) throws Exception {
-        return false;
+    public Node getNode(String dbid, int type, long id) throws Neo4jException {
+        try {
+            return getNodeImpl(dbid, type, id);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "getNode");
+            throw ex;
+        }
+    }
+
+    public Node getNodeImpl(String dbid, int type, long id) throws Neo4jException {
+        if (Level.TRACE.isGreaterOrEqual(debuglevel))
+            logger.trace("getNode for id= " + id + " type=" + type);
+
+        List<Record> results = connection.readTransaction(tx ->
+                tx.run(
+                        "MATCH (n:node{id: $id, type: $type}) " +
+                                "RETURN n.id AS ID, n.type AS TYPE, n.version AS VERSION, n.time AS TIME, n.data AS DATA",
+                        Map.of("id", id, "type", type)
+                ).list()
+        );
+
+        if (results.size() < 1) {
+            logger.trace("getNode found no node");
+            return null;
+        } else if (results.size() > 1) {
+            logger.warn("getNode found " + results.size() + " nodes expected 1.");
+            return null;
+        }
+
+        return recordToNode(results.get(0));
+    }
+
+    @Override
+    public boolean updateNode(String dbid, Node node) throws Neo4jException {
+        try {
+            return updateNodeImpl(dbid, node);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "updateNode");
+            throw ex;
+        }
+    }
+
+    public boolean updateNodeImpl(String dbid, Node node) throws Neo4jException {
+        long updatedNodeCount = connection.writeTransaction(tx ->
+                tx.run("MATCH (n:node{id: $id}) SET n.type = $type, n.version = $version, n.time = $time, n.data = $data " +
+                                "RETURN COUNT(n) AS COUNT",
+                        Map.of(
+                                "id", node.id,
+                                "type", node.type,
+                                "version", node.version,
+                                "time", node.time,
+                                "data", node.data
+                        )).single().get("COUNT").asLong()
+        );
+
+        if (updatedNodeCount == 0) {
+            return false;
+        } else if (updatedNodeCount == 1) {
+            return true;
+        }
+        throw new RuntimeException("Updated multiple links but should have one.");
     }
 
     @Override
     public boolean deleteNode(String dbid, int type, long id) throws Exception {
-        return false;
+        try {
+            return deleteNodeImpl(dbid, type, id);
+        } catch (Neo4jException ex) {
+            processNeo4jException(ex, "deleteNode");
+            throw ex;
+        }
     }
 
-    @Override
-    public void clearErrors(int threadID) {
+    public boolean deleteNodeImpl(String dbid, int type, long id) {
+        long deletedNodeCount = connection.writeTransaction(tx -> {
+            tx.run("MATCH (:node{id: $id})-[l:link]-() DELETE l", Map.of("id", id)).list();
+            return tx.run("MATCH (x:node{id: $id}) " +
+                            "MATCH (n:node{id: $id}) " +
+                            "DELETE n RETURN COUNT(x) AS COUNT",
+                    Map.of("id", id)
+            ).single().get("COUNT").asLong();
+        });
 
+        if (deletedNodeCount == 0) {
+            return false;
+        } else if (deletedNodeCount == 1) {
+            return true;
+        }
+        throw new RuntimeException("Deleted multiple nodes instead of one.");
     }
 
     @Override
@@ -107,85 +234,8 @@ public class Neo4jLinkStore extends GraphStore {
     }
 
     @Override
-    public long[] bulkAddNodes(String dbid, List<Node> nodes) throws Exception {
-        try {
-            bulkAddNodesImpl(dbid, nodes);
-        } catch (Neo4jException ex) {
-
-        }
-
-        return super.bulkAddNodes(dbid, nodes);
-    }
-
-    @Override
     public void addBulkLinks(String dbid, List<Link> a, boolean noinverse) throws Exception {
         super.addBulkLinks(dbid, a, noinverse);
-    }
-
-    public void addNodeImpl(Node node) {
-        bulkAddNodesImpl("", Collections.singletonList(node));
-    }
-
-    public boolean updateNodeImpl(Node node) {
-        long updatedNodeCount = connection.writeTransaction(tx ->
-                tx.run("MATCH (n:node{id: $id}) SET n.type = $type, n.version = $version, n.time = $time, n.data = $data " +
-                        "RETURN COUNT(n) AS COUNT",
-                        Map.of(
-                                "id", node.id,
-                                "type", node.type,
-                                "version", node.version,
-                                "time", node.time,
-                                "data", node.data
-                        )).single().get("COUNT").asLong()
-        );
-
-        if (updatedNodeCount == 0) {
-            return false;
-        } else if (updatedNodeCount == 1) {
-            return true;
-        }
-        throw new RuntimeException("Updated multiple links but should have one.");
-    }
-
-    public boolean deleteNodeImpl(String dbid, int type, long id) {
-        long deletedNodeCount = connection.writeTransaction(tx -> {
-            tx.run("MATCH (:node{id: $id})-[l:link]-() DELETE l", Map.of("id", id)).list();
-            return tx.run("MATCH (x:node{id: $id}) " +
-                            "MATCH (n:node{id: $id}) " +
-                            "DELETE n RETURN COUNT(x) AS COUNT",
-                    Map.of("id", id)
-            ).single().get("COUNT").asLong();
-        });
-
-        if (deletedNodeCount == 0) {
-            return false;
-        } else if (deletedNodeCount == 1) {
-            return true;
-        }
-        throw new RuntimeException("Deleted multiple nodes instead of one.");
-    }
-
-    public Node getNodeImpl(String dbid, int type, long id) {
-        if (Level.TRACE.isGreaterOrEqual(debuglevel))
-            logger.trace("getNode for id= " + id + " type=" + type);
-
-        List<Record> results = connection.readTransaction(tx ->
-                tx.run(
-                        "MATCH (n:node{id: $id, type: $type}) " +
-                                "RETURN n.id AS ID, n.type AS TYPE, n.version AS VERSION, n.time AS TIME, n.data AS DATA",
-                        Map.of("id", id, "type", type)
-                ).list()
-        );
-
-        if (results.size() < 1) {
-            logger.trace("getNode found no node");
-            return null;
-        } else if (results.size() > 1) {
-            logger.warn("getNode found " + results.size() + " nodes expected 1.");
-            return null;
-        }
-
-        return recordToNode(results.get(0));
     }
 
     public void addLinkImpl(Link link) {
@@ -317,40 +367,6 @@ public class Neo4jLinkStore extends GraphStore {
         return linkCount;
     }
 
-    public long[] bulkAddNodesImpl(String dbid, List<Node> nodes) throws Neo4jException {
-        if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
-            logger.trace("bulkAddNodes for " + nodes.size() + " nodes");
-        }
-
-        List<Long> results = connection.writeTransaction(tx ->
-                nodes.stream().map(node ->
-                        tx.run("CREATE (n:node{id: $id, type: $type, version: $version, time: $time, data: $data}) " +
-                                "RETURN n.id AS ID",
-                                Map.of(
-                                        "id", node.id,
-                                        "type", node.type,
-                                        "version", node.version,
-                                        "time", node.time,
-                                        "data", node.data
-                                )
-                        ).single()
-                ).map(rec -> rec.get("ID").asLong()).collect(Collectors.toList())
-        );
-
-        if (results.size() != nodes.size()) {
-            String s = "bulkAddNodes insert for " + nodes.size() +
-                    " returned " + results.size() + " with generated keys";
-            logger.error(s);
-            throw new RuntimeException(s);
-        }
-
-        long[] newIds = new long[results.size()];
-        for (int i = 0; i < results.size(); i++) {
-            newIds[i] = results.get(i);
-        }
-        return newIds;
-    }
-
     public void addBulkLinksImpl(String dbid, List<Link> links, boolean noinverse) {
         connection.writeTransaction(tx ->
                 links.stream().map(l -> tx.run(
@@ -371,7 +387,12 @@ public class Neo4jLinkStore extends GraphStore {
         );
     }
 
-    public static Node recordToNode(Record record) {
+    @Override
+    public void clearErrors(int threadID) {
+
+    }
+
+    protected static Node recordToNode(Record record) {
         long id = record.get("ID").asLong();
         int type = record.get("TYPE").asInt();
         long version = record.get("VERSION").asLong();
@@ -380,7 +401,7 @@ public class Neo4jLinkStore extends GraphStore {
         return new Node(id, type, version, time, data);
     }
 
-    private static Link recordToLink(Record record) {
+    protected static Link recordToLink(Record record) {
         Link link = new Link();
         link.id1 = record.get("ID1").asLong();
         link.id2 = record.get("ID2").asLong();
@@ -390,5 +411,12 @@ public class Neo4jLinkStore extends GraphStore {
         link.time = record.get("TIME").asLong();
         link.data = record.get("DATA").asByteArray();
         return link;
+    }
+
+    protected void processNeo4jException(Neo4jException ex, String op) {
+        String msg = "SQLException thrown by SQL driver during: " + op + ".  ";
+        msg += "Message was: '" + ex.getMessage() + "'.  ";
+        msg += "Neo4j-code was: " + ex.code() + ".  ";
+        logger.error(msg);
     }
 }
