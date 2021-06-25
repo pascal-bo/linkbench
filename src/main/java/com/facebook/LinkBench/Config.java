@@ -149,4 +149,7 @@ public class Config {
   /* Preserves old behavior, even when that might be broken behavior.
      False by default. Can be set to true in config/X.properties */
   public static final String NEVER_CHANGE = "never_change";
+
+  /* Neo4J stuff */
+  public static final String GENERATE_NODES_FIRST = "generate_nodes_first";
 }

@@ -4,8 +4,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import org.neo4j.driver.*;
+import org.neo4j.driver.exceptions.Neo4jException;
 
-public class Neo4JLinkStore extends GraphStore {
+public class Neo4jLinkStore extends GraphStore {
 
     /* database server configuration keys */
     public static final String CONFIG_HOST = "host";
@@ -103,6 +104,22 @@ public class Neo4JLinkStore extends GraphStore {
     @Override
     public long countLinks(String dbid, long id1, long link_type) throws Exception {
         return 0;
+    }
+
+    @Override
+    public long[] bulkAddNodes(String dbid, List<Node> nodes) throws Exception {
+        try {
+            bulkAddNodesImpl(dbid, nodes);
+        } catch (Neo4jException ex) {
+
+        }
+
+        return super.bulkAddNodes(dbid, nodes);
+    }
+
+    @Override
+    public void addBulkLinks(String dbid, List<Link> a, boolean noinverse) throws Exception {
+        super.addBulkLinks(dbid, a, noinverse);
     }
 
     public void addNodeImpl(Node node) {
@@ -300,15 +317,15 @@ public class Neo4JLinkStore extends GraphStore {
         return linkCount;
     }
 
-    public long[] bulkAddNodesImpl(String dbid, List<Node> nodes) {
+    public long[] bulkAddNodesImpl(String dbid, List<Node> nodes) throws Neo4jException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("bulkAddNodes for " + nodes.size() + " nodes");
         }
 
-        List<Record> results = connection.writeTransaction(tx ->
+        List<Long> results = connection.writeTransaction(tx ->
                 nodes.stream().map(node ->
-                        tx.run("CREATE (:node{id: $id, type: $type, version: $version, time: $time, data: $data} " +
-                                "RETURN n.id AS ID)",
+                        tx.run("CREATE (n:node{id: $id, type: $type, version: $version, time: $time, data: $data}) " +
+                                "RETURN n.id AS ID",
                                 Map.of(
                                         "id", node.id,
                                         "type", node.type,
@@ -317,19 +334,19 @@ public class Neo4JLinkStore extends GraphStore {
                                         "data", node.data
                                 )
                         ).single()
-                ).collect(Collectors.toList())
+                ).map(rec -> rec.get("ID").asLong()).collect(Collectors.toList())
         );
 
         if (results.size() != nodes.size()) {
             String s = "bulkAddNodes insert for " + nodes.size() +
-                    " returned " + res + " with " + i + " generated keys ";
+                    " returned " + results.size() + " with generated keys";
             logger.error(s);
             throw new RuntimeException(s);
         }
 
         long[] newIds = new long[results.size()];
         for (int i = 0; i < results.size(); i++) {
-            newIds[i] = results.get(i).get("ID").asLong();
+            newIds[i] = results.get(i);
         }
         return newIds;
     }

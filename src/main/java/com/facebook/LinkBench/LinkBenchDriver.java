@@ -34,6 +34,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /*
  LinkBenchDriver class.
@@ -229,8 +231,10 @@ public class LinkBenchDriver {
     boolean genNodes = ConfigUtil.getBool(props, Config.GENERATE_NODES);
     int nTotalLoaders = genNodes ? nLinkLoaders + 1 : nLinkLoaders;
 
+    boolean genNodesFirst = ConfigUtil.getBool(props, Config.GENERATE_NODES_FIRST, false);
+
     LatencyHistogram latencyStats = latencyHistogramFactory.create(nTotalLoaders, props);
-    List<Runnable> loaders = new ArrayList<Runnable>(nTotalLoaders);
+    List<Runnable> linkLoaders = new ArrayList<Runnable>(nTotalLoaders);
 
     LoadProgress loadTracker = LoadProgress.create(logger, props);
     for (int i = 0; i < nLinkLoaders; i++) {
@@ -239,34 +243,54 @@ public class LinkBenchDriver {
       bulkLoad = bulkLoad && linkStore.bulkLoadBatchSize() > 0;
       LinkBenchLoad l = new LinkBenchLoad(linkStore, props, latencyStats,
               csvStreamFile, i, maxid1 == startid1 + 1, chunk_q_list, loadTracker);
-      loaders.add(l);
+      linkLoaders.add(l);
     }
 
+    List<NodeLoader> nodeLoaders = new ArrayList<>();
     if (genNodes) {
       logger.info("Will generate graph nodes during loading");
       int loaderId = nTotalLoaders - 1;
       NodeStore nodeStore = createNodeStore(null);
       Random rng = new Random(masterRandom.nextLong());
-      loaders.add(new NodeLoader(props, logger, nodeStore, rng,
+      nodeLoaders.add(new NodeLoader(props, logger, nodeStore, rng,
           latencyStats, csvStreamFile, loaderId));
     }
     enqueueLoadWork(chunk_q_list, startid1, maxid1, nLinkLoaders,
                     new Random(masterRandom.nextLong()));
-    // run loaders
-    loadTracker.startTimer();
-    long loadTime = concurrentExec(loaders);
 
+    long loadTime = 0;
     long expectedNodes = maxid1 - startid1;
     long actualLinks = 0;
     long actualCounts = 0;
     long actualNodes = 0;
-    for (final Runnable l:loaders) {
-      if (l instanceof LinkBenchLoad) {
-        actualLinks += ((LinkBenchLoad)l).getLinksLoaded();
-        actualCounts += ((LinkBenchLoad)l).getCountsLoaded();
-      } else {
-        assert(l instanceof NodeLoader);
-        actualNodes += ((NodeLoader)l).getNodesLoaded();
+
+    // run loaders
+    loadTracker.startTimer();
+    if (genNodesFirst) {
+      loadTime = concurrentExec(nodeLoaders);
+      for (final NodeLoader nl : nodeLoaders) {
+          actualNodes += nl.getNodesLoaded();
+      }
+
+      loadTime += concurrentExec(linkLoaders);
+      for (final Runnable ll : linkLoaders) {
+          actualLinks += ((LinkBenchLoad) ll).getLinksLoaded();
+          actualCounts += ((LinkBenchLoad) ll).getCountsLoaded();
+      }
+    } else {
+      List<Runnable> loaders = Stream.of(linkLoaders, nodeLoaders)
+              .flatMap(Collection::stream)
+              .collect(Collectors.toList());
+      loadTime = concurrentExec(loaders);
+
+      for (final Runnable l : loaders) {
+        if (l instanceof LinkBenchLoad) {
+          actualLinks += ((LinkBenchLoad) l).getLinksLoaded();
+          actualCounts += ((LinkBenchLoad) l).getCountsLoaded();
+        } else {
+          assert (l instanceof NodeLoader);
+          actualNodes += ((NodeLoader) l).getNodesLoaded();
+        }
       }
     }
 

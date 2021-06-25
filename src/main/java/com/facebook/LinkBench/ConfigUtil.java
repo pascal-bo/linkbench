@@ -184,4 +184,23 @@ public class ConfigUtil {
                 " to be true or false, but was '" + v + "'");
     }
   }
+
+  /**
+   * Retrieve a config key and convert to boolean.
+   * Valid boolean strings are "true" or "false", case insensitive
+   * @param props
+   * @param key
+   * @return defaultVal
+   */
+  public static boolean getBool(Properties props, String key, boolean defaultVal)
+          throws LinkBenchConfigError {
+    String v = getPropertyRequired(props, key).trim().toLowerCase();
+    if (v.equals("true")) {
+      return true;
+    } else if (v.equals("false")) {
+      return false;
+    } else {
+      return defaultVal;
+    }
+  }
 }
