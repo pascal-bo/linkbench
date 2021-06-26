@@ -1,40 +1,47 @@
 package com.facebook.LinkBench;
 
+import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import org.apache.commons.lang.NotImplementedException;
 import org.neo4j.driver.*;
 import org.neo4j.driver.exceptions.Neo4jException;
 
-public class Neo4jLinkStore extends GraphStore {
+public class LinkStoreNeo4j extends GraphStore {
 
     /* database server configuration keys */
     public static final String CONFIG_HOST = "host";
     public static final String CONFIG_PORT = "port";
-    public static final String CONFIG_USER = "user";
-    public static final String CONFIG_PASSWORD = "password";
 
     Driver neo4jDriver;
     Session connection;
-    String linktable;
-    String counttable;
-    String nodetable;
 
-    // This only supports a single dbid to make reuse of prepared statements easier
-    // TODO -- don't hardwire the value
-    String init_dbid = "";
+    // TODO consider making linklabel and nodelabel configurable
 
     String host;
-    String user;
-    String pwd;
     String port;
 
+    protected Phase phase;
+
     @Override
-    public void initialize(Properties props, Phase phase, int threadId) {
-        neo4jDriver = GraphDatabase.driver("neo4j://localhost:7474", AuthTokens.none());
+    public void initialize(Properties props, Phase currentPhase, int threadId) {
+        super.initialize(props, currentPhase, threadId);
+        try {
+            host = ConfigUtil.getPropertyRequired(props, CONFIG_HOST);
+            port = ConfigUtil.getPropertyRequired(props, CONFIG_PORT);
+            phase = currentPhase;
+
+            openConnection();
+        } catch (Exception ex) {
+            String msg = "Failed to connect to neo4j: " + ex;
+            logger.error(msg);
+            throw new RuntimeException(msg);
+        }
+    }
+    
+    public void openConnection() throws Exception {
+        neo4jDriver = GraphDatabase.driver("bolt://" + host + ":" + port, AuthTokens.none());
         connection = neo4jDriver.session();
-        super.initialize(props, phase, threadId);
     }
 
     @Override
@@ -44,7 +51,7 @@ public class Neo4jLinkStore extends GraphStore {
 
     @Override
     public void resetNodeStore(String dbid, long startID) throws Exception {
-
+        connection.writeTransaction(tx -> tx.run("MATCH (n:node) DETACH DELETE n"));
     }
 
     /* Node operations */
@@ -54,9 +61,9 @@ public class Neo4jLinkStore extends GraphStore {
         try {
             long[] ids = bulkAddNodesImpl(dbid, Collections.singletonList(node));
             if (ids.length != 1) {
-                String errorText = "addNode for " + node.id + " expected 1 returned " + ids.length;
-                logger.error(errorText);
-                throw new RuntimeException(errorText);
+                String msg = "addNode for " + node.id + " expected 1 returned " + ids.length;
+                logger.error(msg);
+                throw new RuntimeException(msg);
             }
             return ids[0];
         } catch (Neo4jException ex) {
@@ -96,10 +103,10 @@ public class Neo4jLinkStore extends GraphStore {
         );
 
         if (results.size() != nodes.size()) {
-            String s = "bulkAddNodes insert for " + nodes.size() +
+            String msg = "bulkAddNodes insert for " + nodes.size() +
                     " returned " + results.size() + " with generated keys";
-            logger.error(s);
-            throw new RuntimeException(s);
+            logger.error(msg);
+            throw new RuntimeException(msg);
         }
 
         long[] newIds = new long[results.size()];
@@ -167,10 +174,12 @@ public class Neo4jLinkStore extends GraphStore {
 
         if (updatedNodeCount == 0) {
             return false;
-        } else if (updatedNodeCount == 1) {
-            return true;
+        } else if (updatedNodeCount != 1) {
+            String msg = "Updated multiple links but should have one.";
+            logger.error(msg);
+            throw new RuntimeException(msg);
         }
-        throw new RuntimeException("Updated multiple links but should have one.");
+        return true;
     }
 
     @Override
@@ -184,33 +193,54 @@ public class Neo4jLinkStore extends GraphStore {
     }
 
     public boolean deleteNodeImpl(String dbid, int type, long id) throws Neo4jException {
-        long deletedNodeCount = connection.writeTransaction(tx -> {
-            tx.run("MATCH (:node{id: $id})-[l:link]-() DELETE l", Map.of("id", id)).list();
-            return tx.run("MATCH (x:node{id: $id}) " +
-                            "MATCH (n:node{id: $id}) " +
-                            "DELETE n RETURN COUNT(x) AS COUNT",
-                    Map.of("id", id)
-            ).single().get("COUNT").asLong();
-        });
+        long deletedNodeCount = connection.writeTransaction(tx ->
+            tx.run("MATCH (n:node{id: $id}) WITH n, COUNT(n.id) AS COUNT " +
+                            "DETACH DELETE n RETURN COUNT",
+                    Map.of("id", id)).single().get("COUNT").asLong()
+        );
 
         if (deletedNodeCount == 0) {
             return false;
-        } else if (deletedNodeCount == 1) {
-            return true;
+        } else if (deletedNodeCount != 1) {
+            String msg = "Deleted multiple nodes instead of one.";
+            logger.error(msg);
+            throw new RuntimeException(msg);
         }
-        throw new RuntimeException("Deleted multiple nodes instead of one.");
+        return true;
     }
 
     /* Link operations */
 
     @Override
-    public LinkWriteResult addLink(String dbid, Link a, boolean noinverse) throws Exception {
-        // TODO implement newLinkLoop
-        throw new NotImplementedException();
+    public LinkWriteResult addLink(String dbid, Link link, boolean noinverse) throws Exception {
+        return newLinkLoop(dbid, link, noinverse, true, "addLink");
     }
 
-    public void addLinkImpl(Link link) throws Neo4jException {
-        addBulkLinksImpl("", Collections.singletonList(link), true);
+    public void addLinkImpl(String dbid, Link link, boolean noinverse) throws Neo4jException {
+        if (Level.TRACE.isGreaterOrEqual(debuglevel))
+            logger.trace("addLink enter for " + link.id1 + "." + link.id2 + "." + link.link_type);
+
+        long createdLinkCount = connection.writeTransaction(tx -> tx.run(
+                        "MATCH (n1:node{id:$id1}), (n2:node{id:$id2}) CREATE (n1)-" +
+                                "[l:link{link_type: $link_type, visibility: $visibility, " +
+                                "data: $data, time: $time, version: $version}]" +
+                                "->(n2) RETURN COUNT(l) AS COUNT",
+                        Map.of(
+                                "id1", link.id1,
+                                "id2", link.id2,
+                                "link_type", link.link_type,
+                                "visibility", link.visibility,
+                                "data", link.data,
+                                "time", link.time,
+                                "version", link.version
+                        )).single()
+                ).get("COUNT").asLong();
+
+        if (createdLinkCount != 1) {
+            String msg = "Operation expected to add 1 link added " + createdLinkCount + " links.";
+            logger.error(msg);
+            throw new RuntimeException(msg);
+        }
     }
 
     @Override
@@ -224,6 +254,9 @@ public class Neo4jLinkStore extends GraphStore {
     }
 
     public void addBulkLinksImpl(String dbid, List<Link> links, boolean noinverse) throws Neo4jException {
+        if (Level.TRACE.isGreaterOrEqual(debuglevel))
+            logger.trace("addBulkLinks: " + links.size() + " links");
+
         long createdLinkCount = connection.writeTransaction(tx ->
                 links.stream().map(l -> tx.run(
                         "MATCH (n1:node{id:$id1}), (n2:node{id:$id2}) CREATE (n1)-" +
@@ -241,29 +274,32 @@ public class Neo4jLinkStore extends GraphStore {
                         )).single()
                 ).mapToLong(rec -> rec.get("COUNT").asLong()).sum()
         );
+
         if (createdLinkCount != links.size()) {
-            String s = "addBulkLinks insert of " + links.size() + " links" +
+            String msg = "addBulkLinks insert of " + links.size() + " links" +
                     " returned " + createdLinkCount;
-            logger.error(s);
-            throw new RuntimeException(s);
+            logger.trace(msg);
+            logger.trace("That can happen if a too small maxID in combination the real distribution was chosen.");
         }
     }
 
     @Override
-    public LinkWriteResult updateLink(String dbid, Link a, boolean noinverse) throws Exception {
-        // TODO implement newLinkLoop
-        throw new NotImplementedException();
+    public LinkWriteResult updateLink(String dbid, Link link, boolean noinverse) throws Exception {
+        return newLinkLoop(dbid, link, noinverse, false, "updateLink");
     }
 
-    public boolean updateLinkImpl(Link link) throws Neo4jException {
+    public LinkWriteResult updateLinkImpl(String dbid, Link link, boolean noinverse) throws Neo4jException {
+        if (Level.TRACE.isGreaterOrEqual(debuglevel))
+            logger.trace("updateLink " + link.id1 + "." + link.id2 + "." + link.link_type);
+
         long updateLinkCount = connection.writeTransaction(tx ->
                 tx.run(
-                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]-(n2:node{id: $id2}) SET " +
+                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]->(n2:node{id: $id2}) SET " +
                                 "l.visibility = $visibility, " +
                                 "l.data = $data, " +
                                 "l.time = $time, " +
                                 "l.version = $version " +
-                                "RETURN COUNT(n1) AS COUNT",
+                                "RETURN COUNT(l) AS COUNT",
                         Map.of(
                                 "id1", link.id1,
                                 "id2", link.id2,
@@ -276,11 +312,13 @@ public class Neo4jLinkStore extends GraphStore {
                 ).single().get("COUNT").asLong());
 
         if (updateLinkCount == 0) {
-            return false;
-        } else if (updateLinkCount == 1) {
-            return true;
+            return LinkWriteResult.LINK_NOT_DONE;
+        } else if (updateLinkCount != 1) {
+            String msg = "Updated multiple links but should have updated only one.";
+            logger.error(msg);
+            throw new RuntimeException(msg);
         }
-        throw new RuntimeException("Updated multiple links but should have one.");
+        return LinkWriteResult.LINK_UPDATE;
     }
 
     @Override
@@ -294,10 +332,13 @@ public class Neo4jLinkStore extends GraphStore {
     }
 
     public boolean deleteLinkImpl(String dbid, long id1, long link_type, long id2) throws Neo4jException {
-        // TODO update query tom support count
+        if (Level.TRACE.isGreaterOrEqual(debuglevel))
+            logger.trace("deleteLink " + id1 + "." + id2 + "." + link_type);
+        
         long deletedLinkCount = connection.writeTransaction(tx ->
                 tx.run(
-                        "MATCH (:node{id: $id, type: $type})-[l:link]-() DELETE l",
+                        "MATCH (:node{id: $id1})-[l:link{link_type: $link_type}}]->(:node{id: $id2}) " +
+                                "WITH l, COUNT(l) AS COUNT DELETE l RETURN COUNT",
                         Map.of(
                                 "id1", id1,
                                 "id2", id2,
@@ -307,11 +348,12 @@ public class Neo4jLinkStore extends GraphStore {
 
         if (deletedLinkCount == 0) {
             return false;
-        } else if (deletedLinkCount == 1) {
-            return true;
+        } else if (deletedLinkCount != 1) {
+            String msg = "Deleted multiple links but should have one.";
+            logger.error(msg);
+            throw new RuntimeException(msg);
         }
-        // TODO evaluate if this is a good idea...
-        throw new RuntimeException("Deleted multiple links but should have one.");
+        return true;
     }
 
     @Override
@@ -331,7 +373,7 @@ public class Neo4jLinkStore extends GraphStore {
 
         List<Record> results = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]-(n2:node{id: $id2}) RETURN " +
+                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]->(n2:node{id: $id2}) RETURN " +
                                 "n1.id AS ID1, n2.id AS ID2, l.link_type AS LINK_TYPE, " +
                                 "l.visibility AS VISIBILITY, l.data AS DATA, l.time AS TIME, l.version AS VERSION",
                         Map.of(
@@ -371,7 +413,7 @@ public class Neo4jLinkStore extends GraphStore {
 
         List<Record> results = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]-(n2:node{id: $id2}) RETURN " +
+                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]->(n2:node{id: $id2}) RETURN " +
                                 "n1.id AS ID1, n2.id AS ID2, l.link_type AS LINK_TYPE, " +
                                 "l.visibility AS VISIBILITY, l.data AS DATA, l.time AS TIME, l.version AS VERSION",
                         Map.of(
@@ -398,11 +440,42 @@ public class Neo4jLinkStore extends GraphStore {
     @Override
     public Link[] getLinkList(String dbid, long id1, long link_type, long minTimestamp, long maxTimestamp, int offset, int limit) throws Exception {
         try {
-            // TODO implement getLinkListImpl
-            throw new NotImplementedException();
+            return getLinkListImpl(dbid, id1, link_type);
         } catch (Neo4jException ex) {
             processNeo4jException(ex, "getLinkList");
             throw ex;
+        }
+    }
+
+    public Link[] getLinkListImpl(String dbid, long id1, long link_type) {
+        if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
+            logger.trace("getLinkList for id1=" + id1 + ", link_type=" + link_type);
+        }
+
+        List<Record> results = connection.readTransaction(tx ->
+                tx.run(
+                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]->(n2:node) RETURN " +
+                                "n1.id AS ID1, n2.id AS ID2, l.link_type AS LINK_TYPE, " +
+                                "l.visibility AS VISIBILITY, l.data AS DATA, l.time AS TIME, l.version AS VERSION",
+                        Map.of(
+                                "id1", id1,
+                                "link_type", link_type
+                        )
+                ).list()
+        );
+
+        Link[] links = new Link[results.size()];
+        for (int i = 0; i < results.size(); i++) {
+            links[i] = recordToLink(results.get(i));
+        }
+
+        if (links.length > 0) {
+            if (Level.TRACE.isGreaterOrEqual(debuglevel))
+                logger.trace("getLinkList found " + links.length + " rows ");
+            return links;
+        } else {
+            logger.trace("getLinkList found no row");
+            return null;
         }
     }
 
@@ -422,7 +495,7 @@ public class Neo4jLinkStore extends GraphStore {
 
         long linkCount = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (:node{id: $id1})-[l:link{link_type: $link_type}]-() RETURN COUNT(l) AS COUNT",
+                        "MATCH (:node{id: $id1})-[l:link{link_type: $link_type}]->(:node) RETURN COUNT(l) AS COUNT",
                         Map.of(
                                 "id1", id1,
                                 "link_type", link_type
@@ -438,9 +511,47 @@ public class Neo4jLinkStore extends GraphStore {
         return linkCount;
     }
 
+    protected LinkWriteResult newLinkLoop(String dbid, Link link, boolean noinverse,
+                                          boolean insert_first, String caller) throws SQLException {
+        boolean do_insert = insert_first;
+        while (true) {
+            if (do_insert) {
+                addLinkImpl(dbid, link, noinverse);
+                return LinkWriteResult.LINK_INSERT;
+            } else {
+                LinkWriteResult wr = updateLinkImpl(dbid, link, noinverse);
+                if (wr == LinkWriteResult.LINK_UPDATE) {
+                  return wr;
+                } else if (wr == LinkWriteResult.LINK_NOT_DONE) {
+                    // Row does not exist, switch to insert
+                    do_insert = true;
+                    retry_upd_to_add.incrementAndGet();
+                    logger.debug("newLinkLoop upd_to_add for id1=" + link.id1 + " id2=" + link.id2 +
+                            " link_type=" + link.link_type + " gap " + (link.id2 - link.id1));
+                } else {
+                    String s = "newLinkLoop bad result for update(" + wr + ") with id1=" + link.id1 +
+                            " id2=" + link.id2 + " link_type=" + link.link_type;
+                    logger.error(s);
+                    throw new RuntimeException(s);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void addBulkCounts(String dbid, List<LinkCount> counts) throws SQLException {
+        logger.trace("Is ignored because neo4j does not create counts.");
+    }
+
     @Override
     public void clearErrors(int threadID) {
-
+            logger.info("Reopening Neo4j connection in threadID " + threadID);
+            try {
+                connection.close();
+                openConnection();
+            } catch (Throwable e) {
+                e.printStackTrace();
+            }
     }
 
     protected static Node recordToNode(Record record) {
