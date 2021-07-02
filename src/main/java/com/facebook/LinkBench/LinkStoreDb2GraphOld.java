@@ -1,9 +1,8 @@
 package com.facebook.LinkBench;
 
-import org.apache.tinkerpop.gremlin.driver.Client;
 import org.apache.tinkerpop.gremlin.driver.Cluster;
 import org.apache.tinkerpop.gremlin.driver.remote.DriverRemoteConnection;
-import org.apache.tinkerpop.gremlin.driver.ser.GraphSONMessageSerializerV3d0;
+import org.apache.tinkerpop.gremlin.driver.ser.GraphBinaryMessageSerializerV1;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 
 import java.io.IOException;
@@ -12,12 +11,11 @@ import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.CompletionException;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalSource.traversal;
 import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.unfold;
 
-public class LinkStoreDb2Graph extends LinkStoreDb2sql{
+public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
 
     public static final String CONFIG_NODE_LABEL = "nodelabel";
     public static final String CONFIG_LINK_LABEL = "linklabel";
@@ -29,8 +27,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     public static final String CONFIG_GRAPH_NAME = "graph_name";
     public static final String CONFIG_GRAPH_TRUST_STORE_PATH = "graph_truststore_path";
     public static final String CONFIG_GRAPH_TRUST_STORE_PASSWORD = "graph_truststore_password";
-    public static final String CONFIG_GRAPH_SESSION_PREFIX = "graph_session_prefix";
-    public static final String CONFIG_GRAPH_CONNECTION = "graph_connection";
 
     String nodelabel;
     String linklabel;
@@ -42,18 +38,14 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     protected String graphName = "";
     protected String graphTrustStorePath = "";
     protected String graphTrustStorePwd = "";
-    protected String graphSession = "";
-    protected String graphConnection = "";
-    protected String graphTravesalSourceName = "";
     protected GraphTraversalSource graphTraversalSource;
     protected Cluster graphCluster;
-    protected Client graphClient;
 
-    public LinkStoreDb2Graph() {
+    public LinkStoreDb2GraphOld() {
         super();
     }
 
-    public LinkStoreDb2Graph(Properties props) throws IOException, Exception {
+    public LinkStoreDb2GraphOld(Properties props) throws IOException, Exception {
         super();
         initialize(props, Phase.LOAD, 0);
     }
@@ -65,18 +57,15 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         graphPort = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_PORT);
         graphUser = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_USER);
         graphPwd = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_PASSWORD);
+        graphName = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_NAME);
         graphTrustStorePath = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_TRUST_STORE_PATH);
         graphTrustStorePwd = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_TRUST_STORE_PASSWORD);
-        graphSession = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_SESSION_PREFIX) + threadId;
-        graphConnection = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_CONNECTION);
-        graphName = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_NAME);
-        graphTravesalSourceName = graphSession + "_" + graphConnection + "_" + graphName + "_traversal";
 
         nodelabel = ConfigUtil.getPropertyRequired(props, CONFIG_NODE_LABEL);
         linklabel = ConfigUtil.getPropertyRequired(props, CONFIG_LINK_LABEL);
 
         try {
-            establishGraphConnection();
+            openGraphConnection();
         } catch(Exception e) {
             throw new RuntimeException("Failed to connect to graph server");
         }
@@ -85,7 +74,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     /**
      * Creates a connection to the db2 graph server.
      */
-    protected void establishGraphConnection() {
+    protected void openGraphConnection() {
         graphCluster = Cluster.build()
                 .addContactPoint(graphHost)
                 .credentials(graphUser, graphPwd)
@@ -93,49 +82,22 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .trustStorePassword(graphTrustStorePwd)
                 .enableSsl(true)
                 .port(8182)
-                .serializer(new GraphSONMessageSerializerV3d0())
+                .serializer(new GraphBinaryMessageSerializerV1())
                 .create();
-
-        graphClient = graphCluster.connect();
-
-        try {
-            openSession();
-        } catch (CompletionException ex) {
-            logger.info("The session '" + graphSession + "' already exists.");
-            closeSession();
-            openSession();
-        }
-
-        openGraphConnection();
-
-        graphTraversalSource = traversal().withRemote(DriverRemoteConnection.using(graphCluster, graphTravesalSourceName));
-
+        graphTraversalSource = traversal().withRemote(DriverRemoteConnection.using(graphCluster, graphName));
         // just a connection test, usually there are no Vertexes with TEST-Labels, thus it should return an empty list.
-        graphTraversalSource.V().hasLabel("TEST").count().toList();
+        graphTraversalSource.V().has("TEST").values().toList();
         logger.trace("Established connection to db2graph.");
     }
 
     @Override
     public void close() {
         super.close();
-
         try {
             if (graphTraversalSource != null) graphTraversalSource.close();
-        } catch (Exception ex) {
-            logger.warn("Failed to close traversalSource.");
-        }
-
-        try {
-            closeSession();
-        } catch (Exception ex) {
-            logger.warn("Failed to close db2graph session.");
-        }
-
-        try {
-            if (graphClient != null) graphClient.close();
             if (graphCluster != null) graphCluster.close();
         } catch (Exception e) {
-            logger.warn("Failed to close connection to graph cluster/client.", e);
+            logger.error("Error while closing graph/gremlin connection: ", e);
         }
     }
 
@@ -444,54 +406,5 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         // ALTER TABLE linkdb0.nodetable ALTER COLUMN id RESTART WITH 1
         stmt_ac1.execute(String.format("ALTER TABLE %s.%s ALTER COLUMN id " +
                 "RESTART WITH 1;", dbid, nodetable, startID));
-    }
-
-    private void openGraphConnection() {
-        graphClient.submit(getCommand("openConnection", graphSession, graphConnection, user, pwd))
-                .all().join().forEach(result -> logger.trace(result.getString()));
-    }
-
-    private void openSession() {
-        graphClient.submit(getCommand("openSession", graphSession, graphUser, graphPwd)).all().join().forEach(result ->
-                logger.trace(result.getString())
-        );
-    }
-
-    private void closeSession() {
-        graphClient.submit(getCommand("closeSession", graphSession)).all().join().forEach(result ->
-                logger.trace(result.getString())
-        );
-    }
-
-    private static String getCommand(String name, Object... params) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("db2graph.");
-        sb.append(name);
-        sb.append("(");
-        if (params != null) {
-            for (int i = 0; i < params.length; i++) {
-                Object p = params[i];
-                if (i > 0) {
-                    sb.append(",");
-                }
-
-                if (p instanceof String) {
-                    sb.append("\"");
-                    sb.append(p);
-                    sb.append("\"");
-                }
-                else if (p instanceof Boolean) {
-                    sb.append("\"");
-                    sb.append((Boolean) p ? "yes" : "no");
-                    sb.append("\"");
-                }
-                else {
-                    sb.append(p);
-                }
-            }
-        }
-        sb.append(")");
-
-        return sb.toString();
     }
 }
