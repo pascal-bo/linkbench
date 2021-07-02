@@ -15,6 +15,7 @@ public class LinkStoreNeo4j extends GraphStore {
     public static final String CONFIG_NODELABEL = "nodelabel";
     public static final String CONFIG_LINKLABEL = "linklabel";
     public static final String CONFIG_BULK_INSERT_COUNT = "bulk_insert_count";
+    public static final String CONFIG_RANGE_LIMIT = "range_limit";
 
     Driver neo4jDriver;
     Session connection;
@@ -38,7 +39,19 @@ public class LinkStoreNeo4j extends GraphStore {
             nodelabel = ConfigUtil.getPropertyRequired(props, CONFIG_NODELABEL);
             linklabel = ConfigUtil.getPropertyRequired(props, CONFIG_LINKLABEL);
             phase = currentPhase;
-            bulkInsertCount = Integer.parseInt(ConfigUtil.getPropertyRequired(props, CONFIG_BULK_INSERT_COUNT));
+
+            try {
+                rangeLimit = ConfigUtil.getInt(props, CONFIG_RANGE_LIMIT);
+            } catch (LinkBenchConfigError ex) {
+                logger.warn("Defaulting to " + DEFAULT_LIMIT + "as RANGE_LIMIT.");
+                rangeLimit = DEFAULT_LIMIT;
+            }
+
+            try {
+                bulkInsertCount = ConfigUtil.getInt(props, CONFIG_BULK_INSERT_COUNT);
+            } catch (LinkBenchConfigError ex) {
+                logger.info("Defaulting to " + bulkInsertCount + "as BULK_INSERT_COUNT.");
+            }
 
             openConnection();
         } catch (Exception ex) {
@@ -455,26 +468,27 @@ public class LinkStoreNeo4j extends GraphStore {
     @Override
     public Link[] getLinkList(String dbid, long id1, long link_type, long minTimestamp, long maxTimestamp, int offset, int limit) throws Exception {
         try {
-            return getLinkListImpl(dbid, id1, link_type);
+            return getLinkListImpl(dbid, id1, link_type, limit);
         } catch (Neo4jException ex) {
             processNeo4jException(ex, "getLinkList");
             throw ex;
         }
     }
 
-    public Link[] getLinkListImpl(String dbid, long id1, long link_type) {
+    public Link[] getLinkListImpl(String dbid, long id1, long link_type, int limit) {
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
-            logger.trace("getLinkList for id1=" + id1 + ", link_type=" + link_type);
+            logger.trace("getLinkList for id1=" + id1 + ", link_type=" + link_type + ", limit=" + limit);
         }
 
         List<Record> results = connection.readTransaction(tx ->
                 tx.run(
                         "MATCH (n1:" + nodelabel + "{id: $id1})-[l:" + linklabel + "{link_type: $link_type}]->(n2:" + nodelabel + ") RETURN " +
                                 "n1.id AS ID1, n2.id AS ID2, l.link_type AS LINK_TYPE, " +
-                                "l.visibility AS VISIBILITY, l.data AS DATA, l.time AS TIME, l.version AS VERSION",
+                                "l.visibility AS VISIBILITY, l.data AS DATA, l.time AS TIME, l.version AS VERSION LIMIT $limit",
                         Map.of(
                                 "id1", id1,
-                                "link_type", link_type
+                                "link_type", link_type,
+                                "limit", limit
                         )
                 ).list()
         );
