@@ -12,6 +12,9 @@ public class LinkStoreNeo4j extends GraphStore {
     /* database server configuration keys */
     public static final String CONFIG_HOST = "host";
     public static final String CONFIG_PORT = "port";
+    public static final String CONFIG_NODELABEL = "nodelabel";
+    public static final String CONFIG_LINKLABEL = "linklabel";
+    public static final String CONFIG_BULK_INSERT_COUNT = "bulk_insert_count";
 
     Driver neo4jDriver;
     Session connection;
@@ -23,13 +26,19 @@ public class LinkStoreNeo4j extends GraphStore {
 
     protected Phase phase;
 
+    protected String nodelabel;
+    protected String linklabel;
+
     @Override
     public void initialize(Properties props, Phase currentPhase, int threadId) {
         super.initialize(props, currentPhase, threadId);
         try {
             host = ConfigUtil.getPropertyRequired(props, CONFIG_HOST);
             port = ConfigUtil.getPropertyRequired(props, CONFIG_PORT);
+            nodelabel = ConfigUtil.getPropertyRequired(props, CONFIG_NODELABEL);
+            linklabel = ConfigUtil.getPropertyRequired(props, CONFIG_LINKLABEL);
             phase = currentPhase;
+            bulkInsertCount = Integer.parseInt(ConfigUtil.getPropertyRequired(props, CONFIG_BULK_INSERT_COUNT));
 
             openConnection();
         } catch (Exception ex) {
@@ -51,7 +60,9 @@ public class LinkStoreNeo4j extends GraphStore {
 
     @Override
     public void resetNodeStore(String dbid, long startID) throws Exception {
-        connection.writeTransaction(tx -> tx.run("MATCH (n:node) DETACH DELETE n"));
+        connection.writeTransaction(
+                tx -> tx.run("MATCH (n:" + nodelabel + ") DETACH DELETE n")
+        );
     }
 
     /* Node operations */
@@ -89,7 +100,7 @@ public class LinkStoreNeo4j extends GraphStore {
 
         List<Long> results = connection.writeTransaction(tx ->
                 nodes.stream().map(node ->
-                        tx.run("CREATE (n:node{id: $id, type: $type, version: $version, time: $time, data: $data}) " +
+                        tx.run("CREATE (n:" + nodelabel + "{id: $id, type: $type, version: $version, time: $time, data: $data}) " +
                                         "RETURN n.id AS ID",
                                 Map.of(
                                         "id", node.id,
@@ -132,9 +143,12 @@ public class LinkStoreNeo4j extends GraphStore {
 
         List<Record> results = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (n:node{id: $id, type: $type}) " +
+                        "MATCH (n:" + nodelabel + "{id: $id, type: $type}) " +
                                 "RETURN n.id AS ID, n.type AS TYPE, n.version AS VERSION, n.time AS TIME, n.data AS DATA",
-                        Map.of("id", id, "type", type)
+                        Map.of(
+                                "id", id,
+                                "type", type
+                        )
                 ).list()
         );
 
@@ -161,7 +175,7 @@ public class LinkStoreNeo4j extends GraphStore {
 
     public boolean updateNodeImpl(String dbid, Node node) throws Neo4jException {
         long updatedNodeCount = connection.writeTransaction(tx ->
-                tx.run("MATCH (n:node{id: $id}) SET n.type = $type, n.version = $version, n.time = $time, n.data = $data " +
+                tx.run("MATCH (n:" + nodelabel + "{id: $id}) SET n.type = $type, n.version = $version, n.time = $time, n.data = $data " +
                                 "RETURN COUNT(n) AS COUNT",
                         Map.of(
                                 "id", node.id,
@@ -194,9 +208,10 @@ public class LinkStoreNeo4j extends GraphStore {
 
     public boolean deleteNodeImpl(String dbid, int type, long id) throws Neo4jException {
         long deletedNodeCount = connection.writeTransaction(tx ->
-            tx.run("MATCH (n:node{id: $id}) WITH n, COUNT(n.id) AS COUNT " +
+            tx.run("MATCH (n:" + nodelabel + "{id: $id}) WITH n, COUNT(n.id) AS COUNT " +
                             "DETACH DELETE n RETURN COUNT",
-                    Map.of("id", id)).single().get("COUNT").asLong()
+                    Map.of("id", id)
+            ).single().get("COUNT").asLong()
         );
 
         if (deletedNodeCount == 0) {
@@ -221,8 +236,8 @@ public class LinkStoreNeo4j extends GraphStore {
             logger.trace("addLink enter for " + link.id1 + "." + link.id2 + "." + link.link_type);
 
         long createdLinkCount = connection.writeTransaction(tx -> tx.run(
-                        "MATCH (n1:node{id:$id1}), (n2:node{id:$id2}) CREATE (n1)-" +
-                                "[l:link{link_type: $link_type, visibility: $visibility, " +
+                        "MATCH (n1:" + nodelabel + "{id:$id1}), (n2:" + nodelabel + "{id:$id2}) CREATE (n1)-" +
+                                "[l:" + linklabel + "{link_type: $link_type, visibility: $visibility, " +
                                 "data: $data, time: $time, version: $version}]" +
                                 "->(n2) RETURN COUNT(l) AS COUNT",
                         Map.of(
@@ -259,8 +274,8 @@ public class LinkStoreNeo4j extends GraphStore {
 
         long createdLinkCount = connection.writeTransaction(tx ->
                 links.stream().map(l -> tx.run(
-                        "MATCH (n1:node{id:$id1}), (n2:node{id:$id2}) CREATE (n1)-" +
-                                "[l:link{link_type: $link_type, visibility: $visibility, " +
+                        "MATCH (n1:" + nodelabel + "{id:$id1}), (n2:" + nodelabel + "{id:$id2}) CREATE (n1)-" +
+                                "[l:" + linklabel + "{link_type: $link_type, visibility: $visibility, " +
                                 "data: $data, time: $time, version: $version}]" +
                                 "->(n2) RETURN COUNT(l) AS COUNT",
                         Map.of(
@@ -294,7 +309,7 @@ public class LinkStoreNeo4j extends GraphStore {
 
         long updateLinkCount = connection.writeTransaction(tx ->
                 tx.run(
-                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]->(n2:node{id: $id2}) SET " +
+                        "MATCH (n1:" + nodelabel + "{id: $id1})-[l:" + linklabel + "{link_type: $link_type}]->(n2:" + nodelabel + "{id: $id2}) SET " +
                                 "l.visibility = $visibility, " +
                                 "l.data = $data, " +
                                 "l.time = $time, " +
@@ -337,7 +352,7 @@ public class LinkStoreNeo4j extends GraphStore {
         
         long deletedLinkCount = connection.writeTransaction(tx ->
                 tx.run(
-                        "MATCH (:node{id: $id1})-[l:link{link_type: $link_type}}]->(:node{id: $id2}) " +
+                        "MATCH (:" + nodelabel + "{id: $id1})-[l:" + linklabel + "{link_type: $link_type}}]->(:" + nodelabel + "{id: $id2}) " +
                                 "WITH l, COUNT(l) AS COUNT DELETE l RETURN COUNT",
                         Map.of(
                                 "id1", id1,
@@ -373,7 +388,7 @@ public class LinkStoreNeo4j extends GraphStore {
 
         List<Record> results = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]->(n2:node{id: $id2}) RETURN " +
+                        "MATCH (n1:" + nodelabel + "{id: $id1})-[l:" + linklabel + "{link_type: $link_type}]->(n2:" + nodelabel + "{id: $id2}) RETURN " +
                                 "n1.id AS ID1, n2.id AS ID2, l.link_type AS LINK_TYPE, " +
                                 "l.visibility AS VISIBILITY, l.data AS DATA, l.time AS TIME, l.version AS VERSION",
                         Map.of(
@@ -413,7 +428,7 @@ public class LinkStoreNeo4j extends GraphStore {
 
         List<Record> results = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]->(n2:node{id: $id2}) RETURN " +
+                        "MATCH (n1:" + nodelabel + "{id: $id1})-[l:" + linklabel + "{link_type: $link_type}]->(n2:" + nodelabel + "{id: $id2}) RETURN " +
                                 "n1.id AS ID1, n2.id AS ID2, l.link_type AS LINK_TYPE, " +
                                 "l.visibility AS VISIBILITY, l.data AS DATA, l.time AS TIME, l.version AS VERSION",
                         Map.of(
@@ -454,7 +469,7 @@ public class LinkStoreNeo4j extends GraphStore {
 
         List<Record> results = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (n1:node{id: $id1})-[l:link{link_type: $link_type}]->(n2:node) RETURN " +
+                        "MATCH (n1:" + nodelabel + "{id: $id1})-[l:" + linklabel + "{link_type: $link_type}]->(n2:" + nodelabel + ") RETURN " +
                                 "n1.id AS ID1, n2.id AS ID2, l.link_type AS LINK_TYPE, " +
                                 "l.visibility AS VISIBILITY, l.data AS DATA, l.time AS TIME, l.version AS VERSION",
                         Map.of(
@@ -495,7 +510,7 @@ public class LinkStoreNeo4j extends GraphStore {
 
         long linkCount = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (:node{id: $id1})-[l:link{link_type: $link_type}]->(:node) RETURN COUNT(l) AS COUNT",
+                        "MATCH (:" + nodelabel + "{id: $id1})-[l:" + linklabel + "{link_type: $link_type}]->(:" + nodelabel + ") RETURN COUNT(l) AS COUNT",
                         Map.of(
                                 "id1", id1,
                                 "link_type", link_type
