@@ -88,6 +88,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         try {
             establishGraphConnection();
         } catch(Exception e) {
+            logger.error(e.getMessage());
             throw new RuntimeException("Failed to connect to graph server");
         }
     }
