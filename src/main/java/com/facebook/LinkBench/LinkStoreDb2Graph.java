@@ -110,11 +110,11 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         graphClient = graphCluster.connect();
 
         try {
-            openSession();
+            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
         } catch (CompletionException ex) {
             logger.info("The session '" + graphSession + "' already exists.");
-            closeSession();
-            openSession();
+            closeSession(graphClient, graphSession, logger);
+            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
         }
 
         openGraphConnection();
@@ -137,7 +137,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
 
         try {
-            closeSession();
+            closeSession(graphClient, graphSession, logger);
         } catch (Exception ex) {
             logger.warn("Failed to close db2graph session.");
         }
@@ -469,13 +469,13 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .all().join().forEach(result -> logger.trace(result.getString()));
     }
 
-    private void openSession() {
+    private synchronized static void openSession(Client graphClient, String graphSession, String graphUser, String graphPwd, Logger logger) {
         graphClient.submit(getCommand("openSession", graphSession, graphUser, graphPwd)).all().join().forEach(result ->
                 logger.trace(result.getString())
         );
     }
 
-    private void closeSession() {
+    private synchronized static void closeSession(Client graphClient, String graphSession, Logger logger) {
         graphClient.submit(getCommand("closeSession", graphSession)).all().join().forEach(result ->
                 logger.trace(result.getString())
         );
