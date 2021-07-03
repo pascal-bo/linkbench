@@ -32,6 +32,8 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     public static final String CONFIG_GRAPH_TRUST_STORE_PASSWORD = "graph_truststore_password";
     public static final String CONFIG_GRAPH_SESSION_PREFIX = "graph_session_prefix";
     public static final String CONFIG_GRAPH_CONNECTION = "graph_connection";
+    public static final String CONFIG_RANGE_LIMIT = "range_limit";
+
 
     String nodelabel;
     String linklabel;
@@ -72,6 +74,13 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         graphConnection = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_CONNECTION);
         graphName = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_NAME);
         graphTravesalSourceName = graphSession + "_" + graphConnection + "_" + graphName + "_traversal";
+
+        try {
+            rangeLimit = ConfigUtil.getInt(props, CONFIG_RANGE_LIMIT);
+        } catch (LinkBenchConfigError ex) {
+            logger.warn("Defaulting to " + DEFAULT_LIMIT + "as RANGE_LIMIT.");
+            rangeLimit = DEFAULT_LIMIT;
+        }
 
         nodelabel = ConfigUtil.getPropertyRequired(props, CONFIG_NODE_LABEL);
         linklabel = ConfigUtil.getPropertyRequired(props, CONFIG_LINK_LABEL);
