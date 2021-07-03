@@ -34,7 +34,7 @@ public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
     protected String graphHost = "";
     protected String graphUser = "";
     protected String graphPwd = "";
-    protected String graphPort = "";
+    protected int graphPort = 8182;
     protected String graphName = "";
     protected String graphTrustStorePath = "";
     protected String graphTrustStorePwd = "";
@@ -54,7 +54,7 @@ public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
         super.initialize(props, currentPhase, threadId);
 
         graphHost = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_HOST);
-        graphPort = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_PORT);
+        graphPort = Integer.parseInt(ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_PORT));
         graphUser = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_USER);
         graphPwd = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_PASSWORD);
         graphName = ConfigUtil.getPropertyRequired(props, CONFIG_GRAPH_NAME);
@@ -81,7 +81,7 @@ public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
                 .trustStore(graphTrustStorePath)
                 .trustStorePassword(graphTrustStorePwd)
                 .enableSsl(true)
-                .port(8182)
+                .port(graphPort)
                 .serializer(new GraphBinaryMessageSerializerV1())
                 .create();
         graphTraversalSource = traversal().withRemote(DriverRemoteConnection.using(graphCluster, graphName));
