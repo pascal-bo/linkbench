@@ -16,6 +16,8 @@
  */
 package com.facebook.LinkBench;
 
+import org.apache.tinkerpop.gremlin.driver.exception.ResponseException;
+
 import javax.sql.rowset.serial.SerialClob;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;

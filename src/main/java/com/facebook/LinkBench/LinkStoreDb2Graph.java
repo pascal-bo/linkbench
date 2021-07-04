@@ -2,6 +2,7 @@ package com.facebook.LinkBench;
 
 import org.apache.tinkerpop.gremlin.driver.Client;
 import org.apache.tinkerpop.gremlin.driver.Cluster;
+import org.apache.tinkerpop.gremlin.driver.exception.ResponseException;
 import org.apache.tinkerpop.gremlin.driver.remote.DriverRemoteConnection;
 import org.apache.tinkerpop.gremlin.driver.ser.GraphBinaryMessageSerializerV1;
 import org.apache.tinkerpop.gremlin.process.traversal.P;
@@ -150,11 +151,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
     }
 
-    @Override
-    protected Node getNodeImpl(String dbid, int type, long id) throws SQLException, IOException {
-        checkNodeTableConfigured();
-        checkDbid(dbid);
-
+    protected Node getNodeGImpl(String dbid, int type, long id) throws ResponseException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("getNode for id= " + id + " type=" + type + " (graph)");
 
@@ -179,10 +176,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         return node;
     }
 
-    @Override
-    protected Link getLinkImpl(String dbid, long id1, long link_type, long id2) throws SQLException, IOException {
-        checkDbid(dbid);
-
+    protected Link getLinkGImpl(String dbid, long id1, long link_type, long id2) throws ResponseException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("getLink for id1=" + id1 + ", link_type=" + link_type +
                     ", id2=" + id2 + " (graph)");
@@ -207,10 +201,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         return valueMapToLink(resultValues.get(0));
     }
 
-    @Override
-    protected long countLinksImpl(String dbid, long id1, long link_type) throws SQLException {
-        checkDbid(dbid);
-
+    protected long countLinksGImpl(String dbid, long id1, long link_type) throws ResponseException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("countLinks for id1=" + id1 + " and link_type=" + link_type + " (graph)");
 
@@ -232,10 +223,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         return countList.get(0);
     }
 
-    @Override
-    protected Link[] multigetLinksImpl(String dbid, long id1, long link_type, long[] id2s) throws SQLException, IOException {
-        checkDbid(dbid);
-
+    protected Link[] multigetLinksGImpl(String dbid, long id1, long link_type, long[] id2s) throws ResponseException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("multigetLinks for id1=" + id1 + " and link_type=" + link_type + " and id2s " +
                     Arrays.toString(id2s) + " (graph)");
@@ -269,10 +257,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
     }
 
-    @Override
-    protected Link[] getLinkListImpl(String dbid, long id1, long link_type, long minTimestamp, long maxTimestamp, int offset, int limit) throws SQLException, IOException {
-        checkDbid(dbid);
-
+    protected Link[] getLinkListGImpl(String dbid, long id1, long link_type, long minTimestamp, long maxTimestamp, int offset, int limit) throws ResponseException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("getLinkList for id1=" + id1 + ", link_type=" + link_type +
                     " minTS=" + minTimestamp + ", maxTS=" + maxTimestamp +
@@ -301,6 +286,71 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         } else {
             logger.trace("getLinkList found no row");
             return null;
+        }
+    }
+
+    @Override
+    public Node getNode(String dbid, int type, long id) throws ResponseException, SQLException, IOException {
+        try {
+            return getNodeGImpl(dbid, type, id);
+        } catch (ResponseException ex) {
+            processResponseException(ex, "countLinks");
+            return getNodeGImpl(dbid, type, id);
+        }
+    }
+
+    @Override
+    public long countLinks(String dbid, long id1, long link_type) throws ResponseException, SQLException {
+        try {
+            return countLinksGImpl(dbid, id1, link_type);
+        } catch (ResponseException ex) {
+            processResponseException(ex, "countLinks");
+            return countLinksGImpl(dbid, id1, link_type);
+        }
+    }
+
+    @Override
+    public Link getLink(String dbid, long id1, long link_type, long id2) throws ResponseException, SQLException, IOException {
+        try {
+            return getLinkGImpl(dbid, id1, link_type, id2);
+        } catch (ResponseException ex) {
+            processResponseException(ex, "getLink");
+            return getLinkGImpl(dbid, id1, link_type, id2);
+        }
+    }
+
+    @Override
+    public Link[] multigetLinks(String dbid, long id1, long link_type, long[] id2s) throws ResponseException, SQLException, IOException {
+        try {
+            return multigetLinksGImpl(dbid, id1, link_type, id2s);
+        } catch (ResponseException ex) {
+            processResponseException(ex, "multigetLink");
+            return multigetLinksGImpl(dbid, id1, link_type, id2s);
+        }
+    }
+
+    @Override
+    public Link[] getLinkList(String dbid, long id1, long link_type, long minTimestamp, long maxTimestamp, int offset, int limit) throws ResponseException, SQLException, IOException {
+        try {
+            return getLinkListGImpl(dbid, id1, link_type, minTimestamp, maxTimestamp, offset, limit);
+        } catch (ResponseException ex) {
+            processResponseException(ex, "getLinkList");
+            return getLinkListGImpl(dbid, id1, link_type, minTimestamp, maxTimestamp, offset, limit);
+        }
+    }
+
+    private void processResponseException(ResponseException ex, String op) {
+        logger.warn("ResponseException from " + op + ": " + ex);
+        String msg = "ResponseException thrown by SQL driver during: " + op + ".  ";
+        msg += "Message was: '" + ex.getMessage() + "'.  ";
+        msg += "Error is transient, trying to reopen session.";
+        logger.warn(msg);
+
+        try {
+            closeSession(graphClient, graphSession, logger);
+            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
+        } catch(Exception exce) {
+            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
         }
     }
 
