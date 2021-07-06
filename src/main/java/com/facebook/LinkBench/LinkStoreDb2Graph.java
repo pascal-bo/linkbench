@@ -111,6 +111,19 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
 
         graphClient = graphCluster.connect();
 
+        setupDb2graphConnection(graphClient, graphSession, graphConnection, graphUser, graphPwd, user, pwd, logger);
+
+        graphTraversalSource = traversal().withRemote(DriverRemoteConnection.using(graphCluster, graphTravesalSourceName));
+
+        // just a connection test, usually there are no Vertexes with TEST-Labels, thus it should return an empty list.
+        graphTraversalSource.V().hasLabel("TEST").count().toList();
+        logger.trace("Established connection to db2graph.");
+    }
+
+    private static synchronized void setupDb2graphConnection(Client graphClient, String graphSession,
+                                                             String graphConnection, String graphUser,
+                                                             String graphPwd, String user,
+                                                             String pwd, Logger logger) {
         try {
             openSession(graphClient, graphSession, graphUser, graphPwd, logger);
         } catch (CompletionException ex) {
@@ -119,13 +132,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             openSession(graphClient, graphSession, graphUser, graphPwd, logger);
         }
 
-        openGraphConnection();
-
-        graphTraversalSource = traversal().withRemote(DriverRemoteConnection.using(graphCluster, graphTravesalSourceName));
-
-        // just a connection test, usually there are no Vertexes with TEST-Labels, thus it should return an empty list.
-        graphTraversalSource.V().hasLabel("TEST").count().toList();
-        logger.trace("Established connection to db2graph.");
+        openGraphConnection(graphClient, graphSession, graphConnection, user, pwd, logger);
     }
 
     @Override
@@ -508,12 +515,15 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 "RESTART WITH 1;", dbid, nodetable, startID));
     }
 
-    private void openGraphConnection() {
+    private synchronized static void openGraphConnection(Client graphClient, String graphSession,
+                                                         String graphConnection, String user,
+                                                         String pwd, Logger logger) {
         graphClient.submit(getCommand("openConnection", graphSession, graphConnection, user, pwd))
                 .all().join().forEach(result -> logger.trace(result.getString()));
     }
 
-    private synchronized static void openSession(Client graphClient, String graphSession, String graphUser, String graphPwd, Logger logger) {
+    private synchronized static void openSession(Client graphClient, String graphSession,
+                                                 String graphUser, String graphPwd, Logger logger) {
         graphClient.submit(getCommand("openSession", graphSession, graphUser, graphPwd)).all().join().forEach(result ->
                 logger.trace(result.getString())
         );
