@@ -3,6 +3,7 @@ package com.facebook.LinkBench;
 import org.apache.tinkerpop.gremlin.driver.Cluster;
 import org.apache.tinkerpop.gremlin.driver.remote.DriverRemoteConnection;
 import org.apache.tinkerpop.gremlin.driver.ser.GraphBinaryMessageSerializerV1;
+import org.apache.tinkerpop.gremlin.process.traversal.P;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 
 import java.io.IOException;
@@ -103,27 +104,24 @@ public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
 
     @Override
     protected Node getNodeImpl(String dbid, int type, long id) throws SQLException, IOException {
-        checkNodeTableConfigured();
-        checkDbid(dbid);
-
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("getNode for id= " + id + " type=" + type + " (graph)");
 
-        Map<Object, Object> nodeId = createNodeId(dbid, nodelabel, id);
-
-        List<Object> resultValues = graphTraversalSource.V(nodeId)
+        List<Map<Object, Object>> resultValues = graphTraversalSource.V()
                 .hasLabel(nodelabel)
-                .values("ID", "TYPE", "VERSION", "TIME", "DATA")
+                .has("ID", id)
+                .valueMap("ID", "TYPE", "VERSION", "TIME", "DATA")
+                .by(unfold())
                 .toList();
 
-        if (resultValues.size() != 5) {
+        if (resultValues.size() != 1) {
             return null;
         }
 
-        Node node = resultToNode(resultValues);
+        Node node = valueMapToNode(resultValues.get(0));
 
         if (node.type != type) {
-            logger.warn("getNode found id=" + id + " with wrong type (" + type + " vs " + type);
+            logger.warn("getNode found id=" + id + " with wrong type (" + type + " vs " + type + ")");
             return null;
         }
 
@@ -132,41 +130,38 @@ public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
 
     @Override
     protected Link getLinkImpl(String dbid, long id1, long link_type, long id2) throws SQLException, IOException {
-        checkDbid(dbid);
-
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("getLink for id1=" + id1 + ", link_type=" + link_type +
                     ", id2=" + id2 + " (graph)");
         }
 
-        Map<Object, Object> linkId = createLinkId(dbid, linklabel, link_type, id1, id2);
-
-        List<Object> resultValues = graphTraversalSource.E(linkId)
-                .hasLabel(linklabel)
-                .values("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
+        List<Map<Object,Object>> resultValues = graphTraversalSource.V()
+                .outE(linklabel)
+                .has("ID1", id1)
+                .has("ID2", id2)
+                .has("LINK_TYPE", link_type)
+                .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .toList();
 
         if (resultValues.size() == 0) {
             logger.trace("getLink found no row");
             return null;
-        } else if (resultValues.size() > 7) {
+        } else if (resultValues.size() > 1) {
             logger.warn("getNode id1=" + id1 + " id2=" + id2 + " link_type=" + link_type +
                     " returns the wrong amount of information: expected=1, actual=" + resultValues.size());
             return null;
         }
-        return resultToLink(resultValues);
+        return valueMapToLink(resultValues.get(0));
     }
 
     @Override
     protected long countLinksImpl(String dbid, long id1, long link_type) throws SQLException {
-        checkDbid(dbid);
-
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("countLinks for id1=" + id1 + " and link_type=" + link_type + " (graph)");
 
-        var nodeId1 = createNodeId(dbid, nodelabel, id1);
-
-        var countList = graphTraversalSource.V(nodeId1)
+        var countList = graphTraversalSource.V()
+                .hasLabel(nodelabel)
+                .has("ID", id1)
                 .outE(linklabel)
                 .count()
                 .toList();
@@ -184,15 +179,17 @@ public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
 
     @Override
     protected Link[] multigetLinksImpl(String dbid, long id1, long link_type, long[] id2s) throws SQLException, IOException {
-        checkDbid(dbid);
-
         if (Level.TRACE.isGreaterOrEqual(debuglevel))
             logger.trace("multigetLinks for id1=" + id1 + " and link_type=" + link_type + " and id2s " +
                     Arrays.toString(id2s) + " (graph)");
 
-        var linkId = createLinkId(dbid, linklabel, link_type, id1, id2s[0]);
+        Long[] id2sBoxed = Arrays.stream(id2s).boxed().toArray(Long[]::new);
 
-        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E(linkId)
+        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E()
+                .hasLabel(linklabel)
+                .has("LINK_TYPE", link_type)
+                .has("ID1", id1)
+                .has("ID2", P.within(id2sBoxed))
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .by(unfold())
                 .toList();
@@ -215,19 +212,17 @@ public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
 
     @Override
     protected Link[] getLinkListImpl(String dbid, long id1, long link_type, long minTimestamp, long maxTimestamp, int offset, int limit) throws SQLException, IOException {
-        checkDbid(dbid);
-
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("getLinkList for id1=" + id1 + ", link_type=" + link_type +
                     " minTS=" + minTimestamp + ", maxTS=" + maxTimestamp +
                     " offset=" + offset + ", limit=" + limit + " (graph)");
         }
 
-        var nodeId1 = createNodeId(dbid, nodelabel, id1);
-
-        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.V(nodeId1)
+        List<Map<Object, Object>> linkValueMaps = graphTraversalSource.V()
+                .hasLabel(nodelabel)
+                .has("ID", id1)
                 .outE(linklabel)
-                .limit(10)
+                .limit(limit)
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .by(unfold())
                 .toList();

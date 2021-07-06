@@ -232,8 +232,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.trace("multigetLinks for id1=" + id1 + " and link_type=" + link_type + " and id2s " +
                     Arrays.toString(id2s) + " (graph)");
 
-        var linkId = createLinkId(dbid, linklabel, link_type, id1, id2s[0]);
-
         Long[] id2sBoxed = Arrays.stream(id2s).boxed().toArray(Long[]::new);
 
         List<Map<Object, Object>> linkValueMaps = graphTraversalSource.E()
