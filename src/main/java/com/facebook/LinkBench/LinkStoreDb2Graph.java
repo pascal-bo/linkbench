@@ -15,6 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalSource.traversal;
 import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.unfold;
@@ -52,6 +53,8 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     protected GraphTraversalSource graphTraversalSource;
     protected Cluster graphCluster;
     protected Client graphClient;
+
+    protected static AtomicInteger activeThreadCounter = new AtomicInteger();
 
     public LinkStoreDb2Graph() {
         super();
@@ -92,6 +95,8 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.error(e.getMessage());
             throw new RuntimeException("Failed to connect to graph server");
         }
+
+        activeThreadCounter.incrementAndGet();
     }
 
     /**
@@ -132,22 +137,21 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         super.close();
 
         try {
-            if (graphTraversalSource != null) graphTraversalSource.close();
-        } catch (Exception ex) {
-            logger.warn("Failed to close traversalSource.");
-        }
-
-        try {
             closeSession(graphClient, graphSession, logger);
         } catch (Exception ex) {
             logger.warn("Failed to close db2graph session.");
         }
 
-        try {
-            if (graphClient != null) graphClient.close();
-            if (graphCluster != null) graphCluster.close();
-        } catch (Exception e) {
-            logger.warn("Failed to close connection to graph cluster/client.", e);
+        int activeThreads = activeThreadCounter.decrementAndGet();
+
+        if (activeThreads == 0) {
+            try {
+                if (graphClient != null) graphClient.close();
+                if (graphCluster != null) graphCluster.close();
+                if (graphTraversalSource != null) graphTraversalSource.close();
+            } catch (Exception e) {
+                logger.warn("Failed to close connection to graph cluster, client or traversal-source.", e);
+            }
         }
     }
 
@@ -266,7 +270,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
 
         List<Map<Object, Object>> linkValueMaps = graphTraversalSource.V()
                 .hasLabel(nodelabel)
-                .has("ID1", id1)
+                .has("ID", id1)
                 .outE(linklabel)
                 .limit(limit)
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
