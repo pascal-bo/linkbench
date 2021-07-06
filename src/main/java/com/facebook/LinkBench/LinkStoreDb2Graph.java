@@ -54,8 +54,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     protected Cluster graphCluster;
     protected Client graphClient;
 
-    protected static AtomicInteger activeThreadCounter = new AtomicInteger();
-
     public LinkStoreDb2Graph() {
         super();
     }
@@ -95,8 +93,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.error(e.getMessage());
             throw new RuntimeException("Failed to connect to graph server");
         }
-
-        activeThreadCounter.incrementAndGet();
     }
 
     /**
@@ -142,16 +138,12 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
             logger.warn("Failed to close db2graph session.");
         }
 
-        int activeThreads = activeThreadCounter.decrementAndGet();
-
-        if (activeThreads == 0) {
-            try {
-                if (graphClient != null) graphClient.close();
-                if (graphCluster != null) graphCluster.close();
-                if (graphTraversalSource != null) graphTraversalSource.close();
-            } catch (Exception e) {
-                logger.warn("Failed to close connection to graph cluster, client or traversal-source.", e);
-            }
+        try {
+            if (graphClient != null) graphClient.close();
+            if (graphCluster != null) graphCluster.close();
+            if (graphTraversalSource != null) graphTraversalSource.close();
+        } catch (Exception e) {
+            logger.warn("Failed to close connection to graph cluster, client or traversal-source.", e);
         }
     }
 
