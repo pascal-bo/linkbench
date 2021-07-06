@@ -15,6 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalSource.traversal;
@@ -530,9 +531,13 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     }
 
     private synchronized static void closeSession(Client graphClient, String graphSession, Logger logger) {
-        graphClient.submit(getCommand("closeSession", graphSession)).all().join().forEach(result ->
-                logger.trace(result.getString())
-        );
+        try {
+            graphClient.submit(getCommand("closeSession", graphSession)).all().get().forEach(result ->
+                    logger.trace(result.getString())
+            );
+        } catch(InterruptedException | ExecutionException ex) {
+            logger.warn("closeSession " + graphSession + "failed.");
+        }
     }
 
     private static String getCommand(String name, Object... params) {
