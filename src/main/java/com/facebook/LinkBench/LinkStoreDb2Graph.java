@@ -112,28 +112,22 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
 
         graphClient = graphCluster.connect();
 
-        setupDb2graphConnection(graphClient, graphSession, graphConnection, graphUser, graphPwd, user, pwd, logger);
+        try {
+            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
+            logger.info("Opened the new session '" + graphSession + "'.");
+        } catch (CompletionException ex) {
+            logger.info("The session '" + graphSession + "' already exists. Reopening the connection.");
+            closeSession(graphClient, graphSession, logger);
+            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
+        }
+
+        openGraphConnection(graphClient, graphSession, graphConnection, user, pwd, logger);
 
         graphTraversalSource = traversal().withRemote(DriverRemoteConnection.using(graphCluster, graphTravesalSourceName));
 
         // just a connection test, usually there are no Vertexes with TEST-Labels, thus it should return an empty list.
         graphTraversalSource.V().hasLabel("TEST").count().toList();
         logger.trace("Established connection to db2graph.");
-    }
-
-    private static synchronized void setupDb2graphConnection(Client graphClient, String graphSession,
-                                                             String graphConnection, String graphUser,
-                                                             String graphPwd, String user,
-                                                             String pwd, Logger logger) {
-        try {
-            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
-        } catch (CompletionException ex) {
-            logger.info("The session '" + graphSession + "' already exists.");
-            closeSession(graphClient, graphSession, logger);
-            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
-        }
-
-        openGraphConnection(graphClient, graphSession, graphConnection, user, pwd, logger);
     }
 
     @Override
@@ -147,11 +141,9 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
 
         try {
-            if (graphClient != null) graphClient.close();
             if (graphCluster != null) graphCluster.close();
-            if (graphTraversalSource != null) graphTraversalSource.close();
         } catch (Exception e) {
-            logger.warn("Failed to close connection to graph cluster, client or traversal-source.", e);
+            logger.warn("Failed to close connection to the graph cluster.", e);
         }
     }
 
@@ -356,27 +348,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         }
     }
 
-    private Node resultToNode(List<Object> results) {
-        byte[] data = base64Decoder.decode((String) results.get(0));
-        long version = ((BigDecimal) results.get(1)).longValue();
-        int time = (int) results.get(2);
-        long id = (long) results.get(3);
-        int type = (int) results.get(4);
-        return new Node(id, type, version, time, data);
-    }
-
-    private Link resultToLink(List<Object> results) {
-        Link link = new Link();
-        link.visibility = (byte) ((int) results.get(0));
-        link.link_type = (long) results.get(1);
-        link.data = ((String) results.get(2)).getBytes(StandardCharsets.US_ASCII);
-        link.id2 = (long) results.get(3);
-        link.id1 = (long) results.get(4);
-        link.version = (int) ((long) results.get(5));
-        link.time = (long) results.get(6);
-        return link;
-    }
-
     private Node valueMapToNode(Map<Object, Object> valueMap) {
         long id = (long) valueMap.get("ID");
         int type = (int) valueMap.get("TYPE");
@@ -396,17 +367,6 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         link.time = (long) valueMap.get("TIME");
         link.version = (int) ((long) valueMap.get("VERSION"));
         return link;
-    }
-
-    private Map<Object, Object> createNodeId(String dbid, String label, Long id) {
-        return Map.of("prefix", String.format("%s.%s", dbid.toUpperCase(), label.toUpperCase()), "idCols", Collections.singletonList(id));
-    }
-
-    private Map<Object, Object> createLinkId(String dbid, String label, Long link_type,  Long id1, Long id2){
-        return Map.of(
-                "prefix", String.format("%s.%s", dbid.toUpperCase(), label.toUpperCase()),
-                "idCols", Arrays.asList(link_type, id1, id2)
-        );
     }
 
     @Override
@@ -516,28 +476,24 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 "RESTART WITH 1;", dbid, nodetable, startID));
     }
 
-    private synchronized static void openGraphConnection(Client graphClient, String graphSession,
+    private void openGraphConnection(Client graphClient, String graphSession,
                                                          String graphConnection, String user,
                                                          String pwd, Logger logger) {
-        graphClient.submit(getCommand("openConnection", graphSession, graphConnection, user, pwd))
-                .all().join().forEach(result -> logger.trace(result.getString()));
+        graphClient.submitAsync(getCommand("openConnection", graphSession, graphConnection, user, pwd))
+                .join().forEach(result -> logger.trace(result.getString()));
     }
 
-    private synchronized static void openSession(Client graphClient, String graphSession,
+    private void openSession(Client graphClient, String graphSession,
                                                  String graphUser, String graphPwd, Logger logger) {
-        graphClient.submit(getCommand("openSession", graphSession, graphUser, graphPwd)).all().join().forEach(result ->
+        graphClient.submitAsync(getCommand("openSession", graphSession, graphUser, graphPwd)).join().forEach(result ->
                 logger.trace(result.getString())
         );
     }
 
-    private synchronized static void closeSession(Client graphClient, String graphSession, Logger logger) {
-        try {
-            graphClient.submit(getCommand("closeSession", graphSession)).all().get().forEach(result ->
-                    logger.trace(result.getString())
-            );
-        } catch(InterruptedException | ExecutionException ex) {
-            logger.warn("closeSession " + graphSession + "failed.");
-        }
+    private void closeSession(Client graphClient, String graphSession, Logger logger) {
+        graphClient.submitAsync(getCommand("closeSession", graphSession)).join().forEach(result ->
+                logger.trace(result.getString())
+        );
     }
 
     private static String getCommand(String name, Object... params) {
