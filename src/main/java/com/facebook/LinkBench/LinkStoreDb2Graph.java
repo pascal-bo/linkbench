@@ -15,8 +15,6 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalSource.traversal;
 import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.unfold;
@@ -112,16 +110,29 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
 
         graphClient = graphCluster.connect();
 
-        try {
-            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
+
+        Db2graphSessionState didSessionOpen = openSession(graphClient, graphSession, graphUser, graphPwd, logger);
+        if (didSessionOpen == Db2graphSessionState.SUCCESS) {
             logger.info("Opened the new session '" + graphSession + "'.");
-        } catch (CompletionException ex) {
-            logger.info("The session '" + graphSession + "' already exists. Reopening the connection.");
-            closeSession(graphClient, graphSession, logger);
-            openSession(graphClient, graphSession, graphUser, graphPwd, logger);
+        } else {
+            logger.info("The session '" + graphSession + "' already exists.");
+
+            boolean didSessionClose;
+            do {
+                didSessionClose = closeSession(graphClient, graphSession, logger);
+            } while (!didSessionClose);
+
+            do {
+                didSessionOpen = openSession(graphClient, graphSession, graphUser, graphPwd, logger);
+            } while (didSessionOpen == Db2graphSessionState.FAILED);
+            logger.info("Reopened session '" + graphSession + "'.");
         }
 
-        openGraphConnection(graphClient, graphSession, graphConnection, user, pwd, logger);
+        boolean didConnectionOpen;
+        do {
+            didConnectionOpen = openConnection(graphClient, graphSession, graphConnection, user, pwd, logger);
+            logger.trace("Opened graph connection for '" + graphSession + "'.");
+        } while (!didConnectionOpen);
 
         graphTraversalSource = traversal().withRemote(DriverRemoteConnection.using(graphCluster, graphTravesalSourceName));
 
@@ -133,15 +144,10 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
     @Override
     public void close() {
         super.close();
-
         try {
-            closeSession(graphClient, graphSession, logger);
-        } catch (Exception ex) {
-            logger.warn("Failed to close db2graph session.");
-        }
-
-        try {
-            if (graphCluster != null) graphCluster.close();
+            graphTraversalSource.close();
+            graphClient.closeAsync();
+            graphCluster.closeAsync();
         } catch (Exception e) {
             logger.warn("Failed to close connection to the graph cluster.", e);
         }
@@ -476,24 +482,59 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 "RESTART WITH 1;", dbid, nodetable, startID));
     }
 
-    private void openGraphConnection(Client graphClient, String graphSession,
-                                                         String graphConnection, String user,
-                                                         String pwd, Logger logger) {
-        graphClient.submitAsync(getCommand("openConnection", graphSession, graphConnection, user, pwd))
-                .join().forEach(result -> logger.trace(result.getString()));
+    private boolean openConnection(Client graphClient, String graphSession,
+                                   String graphConnection, String user,
+                                   String pwd, Logger logger) {
+        try {
+            graphClient.submitAsync(getCommand("openConnection", graphSession, graphConnection, user, pwd))
+                    .join().forEach(result -> logger.trace(result.getString()));
+        } catch(CompletionException ex) {
+            if (ex.getMessage().contains("java.util.ConcurrentModificationException")) {
+                logger.trace("Opening connection in session '" + graphSession + "' failed due to a ConcurrentModification problem. Try again.");
+                return false;
+            }
+        }
+        return true;
     }
 
-    private void openSession(Client graphClient, String graphSession,
-                                                 String graphUser, String graphPwd, Logger logger) {
-        graphClient.submitAsync(getCommand("openSession", graphSession, graphUser, graphPwd)).join().forEach(result ->
-                logger.trace(result.getString())
-        );
+    private Db2graphSessionState openSession(Client graphClient, String graphSession,
+                                             String graphUser, String graphPwd, Logger logger) {
+        try {
+            graphClient.submitAsync(getCommand("openSession", graphSession, graphUser, graphPwd)).join().forEach(result ->
+                    logger.trace(result.getString())
+            );
+        } catch(CompletionException ex) {
+            if (ex.getMessage().contains("already exists")) {
+                logger.trace("Session '" + graphSession + "' already exists.");
+                return Db2graphSessionState.SESSION_ALREADY_EXISTS;
+            }
+
+            if (ex.getMessage().contains("java.util.ConcurrentModificationException")) {
+                logger.trace("Opening the session '" + graphSession + "' failed due to a ConcurrentModification problem. Try again.");
+                return Db2graphSessionState.FAILED;
+            }
+
+            throw new RuntimeException("Unexpected situation in openSession. Only expected session 'already exists' or " +
+                    "'ConcurrentModification' problem not: " + ex.getMessage());
+        }
+        return Db2graphSessionState.SUCCESS;
     }
 
-    private void closeSession(Client graphClient, String graphSession, Logger logger) {
-        graphClient.submitAsync(getCommand("closeSession", graphSession)).join().forEach(result ->
-                logger.trace(result.getString())
-        );
+    private boolean closeSession(Client graphClient, String graphSession, Logger logger) {
+        try {
+            graphClient.submitAsync(getCommand("closeSession", graphSession)).join().forEach(result ->
+                    logger.trace(result.getString())
+            );
+        } catch(CompletionException ex) {
+            if (ex.getMessage().contains("java.util.ConcurrentModificationException")) {
+                logger.trace("Closing session '" + graphSession + "' failed due to a ConcurrentModification problem. Try again.");
+                return false;
+            }
+
+            throw new RuntimeException("Unexpected situation in closeSession. Only expected session " +
+                    "'ConcurrentModification' problem not: " + ex.getMessage());
+        }
+        return true;
     }
 
     private static String getCommand(String name, Object... params) {
@@ -526,5 +567,9 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
         sb.append(")");
 
         return sb.toString();
+    }
+
+    protected enum Db2graphSessionState {
+        SUCCESS, SESSION_ALREADY_EXISTS, FAILED
     }
 }
