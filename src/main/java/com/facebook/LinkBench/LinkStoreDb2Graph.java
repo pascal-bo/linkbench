@@ -211,6 +211,7 @@ public class LinkStoreDb2Graph extends LinkStoreDb2sql{
                 .hasLabel(nodelabel)
                 .has("ID", id1)
                 .outE(linklabel)
+                .has("LINK_TYPE", link_type)
                 .count()
                 .toList();
 
