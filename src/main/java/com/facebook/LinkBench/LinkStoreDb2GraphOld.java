@@ -223,6 +223,7 @@ public class LinkStoreDb2GraphOld extends LinkStoreDb2sql{
                 .hasLabel(nodelabel)
                 .has("ID", id1)
                 .outE(linklabel)
+                .has("LINK_TYPE", link_type)
                 .limit(limit)
                 .valueMap("ID1", "ID2", "LINK_TYPE", "VISIBILITY", "DATA", "TIME", "VERSION")
                 .by(unfold())
