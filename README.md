@@ -16,20 +16,20 @@ mvn clean package -DskipTests
 
 ```bash
 # Beta 3
-./bin/linkbench -c config/LinkConfigDb2graph.properties -l
+./bin/linkbench -c config/LinkConfigDb2graphOld.properties -l
 
 # V11.5.6.0
-./bin/linkbench -c config/LinkConfigDb2graphOld.properties -l
+./bin/linkbench -c config/LinkConfigDb2graph.properties -l
 ```
 
 ## Run a benchmark
 
 ```bash
 # Beta 3
-./bin/linkbench -c config/LinkConfigDb2graph.properties -r
+./bin/linkbench -c config/LinkConfigDb2graphOld.properties -r
 
 # V11.5.6.0
-./bin/linkbench -c config/LinkConfigDb2graphOld.properties -r
+./bin/linkbench -c config/LinkConfigDb2graph.properties -r
 ```
 
 ## Notice
