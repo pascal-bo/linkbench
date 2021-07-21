@@ -1,3 +1,77 @@
+Linkbench Db2 Graph Adapters
+============================
+The files in the `src` directory contain two different implementations for Db2 Graph: 
+* LinkStoreDb2Graph, which works in conjunction with Db2 Graph V11.5.6.0. 
+* LinkStoreDb2GraphOld, which is compatible with Db2 Graph Beta 3. 
+
+Please read the notice section before using the Db2 Graph adapters.
+
+## Build 
+
+```bash
+mvn clean package -DskipTests
+```
+
+## Generate and load linkbench data
+
+```bash
+# Beta 3
+./bin/linkbench -c config/LinkConfigDb2graph.properties -l
+
+# V11.5.6.0
+./bin/linkbench -c config/LinkConfigDb2graphOld.properties -l
+```
+
+## Run a benchmark
+
+```bash
+# Beta 3
+./bin/linkbench -c config/LinkConfigDb2graph.properties -r
+
+# V11.5.6.0
+./bin/linkbench -c config/LinkConfigDb2graphOld.properties -r
+```
+
+## Notice
+
+### Db2 Graph V11.5.6.0 adapter
+
+The Db2 Graph V11.5.6.0 adapter is not completly stable. Sometimes there occure unknown problems while opening and closing sessions or client connections at the start or end of a linkbench run. These problems do <b>not</b> affect the benchmarked operations. Futhermore, each session / connection has to be opened before the benchmark starts to send request to Db2 Graph. If any error occurs while linkbench opens a session the driver errors out.
+
+### Db2 Graph V11.5.6.0 adapter
+
+The adapter assumes that the graph `linkdb0` in Db2 Graph is auto-opened if a connection in Db2 Graph is esthablished. This is <b>important</b>, otherwise the adapter will not work. 
+
+### Configuration
+
+The following values in `config/LinkConfigDb2graph.properties` and `config/LinkConfigDb2graphOld.properties` have to be adjusted before running the benchmark:
+```bash
+# Db2 related configs
+host = localhost
+user = db2inst1
+password = ...
+
+# Db2 Graph related configs
+graph_host = localhost
+graph_user = graph_user
+graph_password = ...
+graph_name = ...
+graph_truststore_path = path/to/graph.jks
+graph_truststore_password = ...
+graph_connection = ...
+```
+
+### Select benchmark operations
+
+To adjust the operation mix for the benchmark, change the following values in `ConstWorkload.properties`:
+
+```bash
+countlink = 0
+getlink = 0
+getlinklist = 0
+getnode = 100
+```
+
 LinkBench Overview
 ====================
 LinkBench is a database benchmark developed to evaluate database
