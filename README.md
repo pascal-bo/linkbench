@@ -42,6 +42,10 @@ The Db2 Graph V11.5.6.0 adapter is not completly stable. Sometimes there occure 
 
 The adapter assumes that the graph `linkdb0` in Db2 Graph is auto-opened if a connection in Db2 Graph is esthablished. This is <b>important</b>, otherwise the adapter will not work. 
 
+### linkdb0.counttable
+
+While the `linkdb0.counttable` is not used by the Db2 Graph Adapters directly, the Linkbench Driver requires it to exist. Without the that table any load or run of the benchmark will not work.
+
 ### Configuration
 
 The following values in `config/LinkConfigDb2graph.properties` and `config/LinkConfigDb2graphOld.properties` have to be adjusted before running the benchmark:
