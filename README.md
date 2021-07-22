@@ -44,7 +44,7 @@ The adapter assumes that the graph `linkdb0` in Db2 Graph is auto-opened if a co
 
 ### linkdb0.counttable
 
-While the `linkdb0.counttable` is not used by the Db2 Graph Adapters directly, the Linkbench Driver requires it to exist. Without the that table any load or run of the benchmark will not work.
+While the `linkdb0.counttable` is not used by the Db2 Graph Adapters directly, the Linkbench Driver requires it to exist. Without this table any load or run of the benchmark will not work.
 
 ### Configuration
 
