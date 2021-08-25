@@ -156,11 +156,10 @@ public class LinkStoreNeo4j extends GraphStore {
 
         List<Record> results = connection.readTransaction(tx ->
                 tx.run(
-                        "MATCH (n:" + nodelabel + "{id: $id, type: $type}) " +
+                        "MATCH (n:" + nodelabel + "{id: $id}) " +
                                 "RETURN n.id AS ID, n.type AS TYPE, n.version AS VERSION, n.time AS TIME, n.data AS DATA",
                         Map.of(
-                                "id", id,
-                                "type", type
+                                "id", id
                         )
                 ).list()
         );
