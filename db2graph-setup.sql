@@ -7,10 +7,8 @@ CREATE TABLE linkdb0.linktable
     data       varchar(255) NOT NULL DEFAULT '',
     time       bigint  NOT NULL DEFAULT '0',
     version    bigint       NOT NULL DEFAULT '0',
-    PRIMARY KEY (link_type, id1, id2),
-    FOREIGN KEY (id1) REFERENCES linkdb0.nodetable(id),  
-    FOREIGN KEY (id2) REFERENCES linkdb0.nodetable(id)
-);
+    PRIMARY KEY (link_type, id1, id2)
+) COMPRESS YES;
 
 CREATE TABLE linkdb0.counttable
 (
@@ -19,9 +17,8 @@ CREATE TABLE linkdb0.counttable
     count     int         NOT NULL DEFAULT '0',
     time      bigint NOT NULL DEFAULT '0',
     version   bigint NOT NULL DEFAULT '0',
-    PRIMARY KEY (id, link_type),
-    FOREIGN KEY (id) REFERENCES linkdb0.nodetable(id)
-);
+    PRIMARY KEY (id, link_type)
+) COMPRESS YES;
 
 CREATE TABLE linkdb0.nodetable
 (
@@ -29,6 +26,6 @@ CREATE TABLE linkdb0.nodetable
     type    int       NOT NULL,
     version numeric   NOT NULL,
     time    int       NOT NULL,
-    data    clob(128000)  NOT NULL,
+    data    clob(48000)  NOT NULL,
     PRIMARY KEY (id)
-);
+) COMPRESS YES;
