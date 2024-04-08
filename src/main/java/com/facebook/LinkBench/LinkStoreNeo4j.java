@@ -394,7 +394,7 @@ public class LinkStoreNeo4j extends GraphStore {
         }
     }
 
-    public Link getLinkImpl(String dbid, long id1, long id2, long link_type) throws Neo4jException {
+    public Link getLinkImpl(String dbid, long id1, long link_type, long id2) throws Neo4jException {
         if (Level.TRACE.isGreaterOrEqual(debuglevel)) {
             logger.trace("getLink for id1=" + id1 + ", link_type=" + link_type + ", id2=" + id2);
         }
