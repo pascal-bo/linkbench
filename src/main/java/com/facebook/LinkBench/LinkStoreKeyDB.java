@@ -1,8 +1,10 @@
 package com.facebook.LinkBench;
 
+import java.sql.SQLException;
 import java.util.*;
 
 import eu.hfu.KeyDBGraph;
+import org.neo4j.driver.exceptions.Neo4jException;
 
 public class LinkStoreKeyDB extends GraphStore{
 
@@ -72,6 +74,17 @@ public class LinkStoreKeyDB extends GraphStore{
     }
 
     @Override
+    public long[] bulkAddNodes(String dbid, List<Node> nodes) throws Exception {
+        long[] results = new long[nodes.size()];
+        int index = 0;
+        for (Node n : nodes){
+            results[index++] = addNode(dbid, n);
+        }
+        return results;
+    }
+
+
+        @Override
     public Node getNode(String dbid, int type, long id) throws Exception {
         return getNode(id);
     }
@@ -114,7 +127,14 @@ public class LinkStoreKeyDB extends GraphStore{
         }
     }
 
-    @Override
+    public void addBulkLinks(String dbid, List<Link> a, boolean noinverse) throws Exception {
+        for (Link l : a){
+            addLink(dbid, l, noinverse);
+        }
+    }
+
+
+        @Override
     public boolean deleteLink(String dbid, long id1, long link_type, long id2, boolean noinverse, boolean expunge) throws Exception {
         return keyDBGraph.deleteEdge(id1, id2, link_type);
     }
@@ -133,6 +153,10 @@ public class LinkStoreKeyDB extends GraphStore{
     @Override
     public Link getLink(String dbid, long id1, long link_type, long id2) throws Exception {
         Map<String, String> result = keyDBGraph.getEdge(id1, id2, link_type);
+        if(result.isEmpty()){
+            logger.trace("getLink found no link");
+            return null;
+        }
         return resultToLink(result, id1, id2);
     }
 
@@ -167,6 +191,11 @@ public class LinkStoreKeyDB extends GraphStore{
         return Long.parseLong(keyDBGraph.countEdge(id1, link_type));
     }
 
+    @Override
+    public void addBulkCounts(String dbid, List<LinkCount> counts) throws SQLException {
+        logger.trace("Is ignored because keyDB does not create counts.");
+    }
+
     protected static Node resultToNode(Map<String, String> result, long id){
         String type = result.get("type");
         String data = result.get("data");
@@ -186,6 +215,9 @@ public class LinkStoreKeyDB extends GraphStore{
 
     protected static byte[] parseStringToByteArray(String data){
         data = data.substring(1, data.length() - 1);
+        if(data.isEmpty()){
+            return new byte[0];
+        }
         String[] bytes = data.split(",");
         byte[] result = new byte[bytes.length];
         for (int i = 0; i < bytes.length; i++) {
