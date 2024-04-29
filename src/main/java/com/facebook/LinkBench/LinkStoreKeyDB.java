@@ -4,7 +4,7 @@ import java.sql.SQLException;
 import java.util.*;
 
 import eu.hfu.KeyDBGraph;
-import org.neo4j.driver.exceptions.Neo4jException;
+import eu.hfu.ResultValue;
 
 public class LinkStoreKeyDB extends GraphStore{
 
@@ -69,14 +69,17 @@ public class LinkStoreKeyDB extends GraphStore{
 
     @Override
     public long addNode(String dbid, Node node) throws Exception {
+        logger.debug("Adding Node: " + node);
         keyDBGraph.addNode(node.id, node.type, node.version, node.time, node.data);
         return node.id;
     }
 
     @Override
     public long[] bulkAddNodes(String dbid, List<Node> nodes) throws Exception {
+        logger.debug("Bulk adding Nodes: ");
         long[] results = new long[nodes.size()];
         int index = 0;
+
         for (Node n : nodes){
             results[index++] = addNode(dbid, n);
         }
@@ -84,12 +87,14 @@ public class LinkStoreKeyDB extends GraphStore{
     }
 
 
-        @Override
+    @Override
     public Node getNode(String dbid, int type, long id) throws Exception {
+        logger.debug("Getting Node: type(" + type + ") id(" + id + ")");
         return getNode(id);
     }
 
     public Node getNode(long id) throws Exception {
+        logger.debug("Getting Node: id(" + id + ")");
         return resultToNode(keyDBGraph.getNode(id), id);
     }
 
@@ -97,12 +102,14 @@ public class LinkStoreKeyDB extends GraphStore{
     public boolean updateNode(String dbid, Node node) throws Exception {
         String result = keyDBGraph.updateNode(node.id, node.version, node.time, node.data);
         return !result.isEmpty();
+        logger.debug("Updating Node: " + node);
     }
 
     @Override
     public boolean deleteNode(String dbid, int type, long id) throws Exception {
         long result = keyDBGraph.deleteNode(id);
         return result == 1;
+        logger.debug("Deleting Node: type(" + type + ") id(" + id + ")");
     }
 
     @Override
@@ -120,6 +127,7 @@ public class LinkStoreKeyDB extends GraphStore{
     public LinkWriteResult addLink(String dbid, Link a, boolean noinverse) throws Exception {
         boolean result = keyDBGraph.addEdge(a.id1, a.id2, a.link_type, a.visibility, a.time, a.version, a.data);
         if(result){
+        logger.debug("Adding Link: " + a);
             return LinkWriteResult.LINK_INSERT;
         }
         else {
@@ -128,6 +136,7 @@ public class LinkStoreKeyDB extends GraphStore{
     }
 
     public void addBulkLinks(String dbid, List<Link> a, boolean noinverse) throws Exception {
+        logger.debug("Bulk adding Links: ");
         for (Link l : a){
             addLink(dbid, l, noinverse);
         }
@@ -137,6 +146,7 @@ public class LinkStoreKeyDB extends GraphStore{
         @Override
     public boolean deleteLink(String dbid, long id1, long link_type, long id2, boolean noinverse, boolean expunge) throws Exception {
         return keyDBGraph.deleteEdge(id1, id2, link_type);
+        logger.debug("Deleting Link: id1(" + id1 + ") id2(" + id2 + ")");
     }
 
     @Override
@@ -144,6 +154,7 @@ public class LinkStoreKeyDB extends GraphStore{
         String result = keyDBGraph.updateEdge(a.id1, a.id2, a.link_type, a.visibility, a.time, a.version, a.data);
         if(result.isEmpty()){
             return LinkWriteResult.LINK_NOT_DONE;
+        logger.debug("Updating Link: " + a);
         }
         else {
             return LinkWriteResult.LINK_UPDATE;
@@ -152,6 +163,7 @@ public class LinkStoreKeyDB extends GraphStore{
 
     @Override
     public Link getLink(String dbid, long id1, long link_type, long id2) throws Exception {
+        logger.debug("Getting Link: id1(" + id1 + ") linktype(" + link_type + ") id2(" + id2 + ")");
         Map<String, String> result = keyDBGraph.getEdge(id1, id2, link_type);
         if(result.isEmpty()){
             logger.trace("getLink found no link");
@@ -162,7 +174,10 @@ public class LinkStoreKeyDB extends GraphStore{
 
     @Override
     public Link[] multigetLinks(String dbid, long id1, long link_type, long[] id2s) throws Exception {
+        logger.debug("Multigetting Links: id1(" + id1 + ") linktype(" + link_type + ") id2s:");
+
         Link[] allLinks = new Link[id2s.length];
+
         for(int i = 0; i<id2s.length; i++){
             long id2 = id2s[i];
             allLinks[i] = getLink(dbid, id1, link_type, id2);
@@ -172,9 +187,11 @@ public class LinkStoreKeyDB extends GraphStore{
 
     @Override
     public Link[] getLinkList(String dbid, long id1, long link_type) throws Exception {
+        logger.debug("GetLinkList: id1(" + id1 + ") linktype(" + link_type + ")");
         Set<String> allEndNodes = keyDBGraph.getEndNodesForAnOutgoingEdge(id1, link_type);
         long[] allEndNodeIDs = new long[allEndNodes.size()];
         int index = 0;
+
         for (String endNode : allEndNodes) {
             allEndNodeIDs[index++] = (Long.parseLong(endNode));
         }
