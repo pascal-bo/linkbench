@@ -100,16 +100,16 @@ public class LinkStoreKeyDB extends GraphStore{
 
     @Override
     public boolean updateNode(String dbid, Node node) throws Exception {
-        String result = keyDBGraph.updateNode(node.id, node.version, node.time, node.data);
-        return !result.isEmpty();
         logger.debug("Updating Node: " + node);
+        ResultValue resultValue = keyDBGraph.updateNode(node.id, node.version, node.time, node.data);
+        return resultValue == ResultValue.NODE_UPDATE_SUCCESSFUL;
     }
 
     @Override
     public boolean deleteNode(String dbid, int type, long id) throws Exception {
-        long result = keyDBGraph.deleteNode(id);
-        return result == 1;
         logger.debug("Deleting Node: type(" + type + ") id(" + id + ")");
+        ResultValue resultvalue = keyDBGraph.deleteNode(id);
+        return resultvalue == ResultValue.NODE_DELETE_SUCCESSFUL;
     }
 
     @Override
@@ -125,9 +125,9 @@ public class LinkStoreKeyDB extends GraphStore{
 
     @Override
     public LinkWriteResult addLink(String dbid, Link a, boolean noinverse) throws Exception {
-        boolean result = keyDBGraph.addEdge(a.id1, a.id2, a.link_type, a.visibility, a.time, a.version, a.data);
-        if(result){
         logger.debug("Adding Link: " + a);
+        ResultValue resultValue = keyDBGraph.addEdge(a.id1, a.id2, a.link_type, a.visibility, a.time, a.version, a.data);
+        if(resultValue == ResultValue.EDGE_INSERT_SUCCESSFUL){
             return LinkWriteResult.LINK_INSERT;
         }
         else {
@@ -145,16 +145,17 @@ public class LinkStoreKeyDB extends GraphStore{
 
         @Override
     public boolean deleteLink(String dbid, long id1, long link_type, long id2, boolean noinverse, boolean expunge) throws Exception {
-        return keyDBGraph.deleteEdge(id1, id2, link_type);
         logger.debug("Deleting Link: id1(" + id1 + ") id2(" + id2 + ")");
+        ResultValue resultvalue = keyDBGraph.deleteEdge(id1, id2, link_type);
+        return resultvalue == ResultValue.EDGE_DELETE_SUCCESSFUL;
     }
 
     @Override
     public LinkWriteResult updateLink(String dbid, Link a, boolean noinverse) throws Exception {
-        String result = keyDBGraph.updateEdge(a.id1, a.id2, a.link_type, a.visibility, a.time, a.version, a.data);
-        if(result.isEmpty()){
-            return LinkWriteResult.LINK_NOT_DONE;
         logger.debug("Updating Link: " + a);
+        ResultValue resultValue = keyDBGraph.updateEdge(a.id1, a.id2, a.link_type, a.visibility, a.time, a.version, a.data);
+        if(resultValue == ResultValue.EDGE_UPDATE_SUCCESSFUL){
+            return LinkWriteResult.LINK_UPDATE;
         }
         else {
             return LinkWriteResult.LINK_UPDATE;
