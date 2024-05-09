@@ -17,11 +17,13 @@ package com.facebook.LinkBench.stats;
 
 import java.io.PrintStream;
 import java.text.DecimalFormat;
+import java.util.Arrays;
 
 import com.facebook.LinkBench.LinkBenchOp;
 import com.facebook.LinkBench.LinkStore;
 import com.facebook.LinkBench.Logger;
 import org.HdrHistogram.Histogram;
+import org.HdrHistogram.HistogramIterationValue;
 
 /**
  * Class used to track latency values using HDR Histogram.  This provides
@@ -105,9 +107,14 @@ public class HdrLatencyHistogram implements LatencyHistogram {
     // Write out the header
     if (header) {
       out.print("op,count");
+      int last_percentile = 0;
       for (int percentile: percentiles) {
         out.print(String.format(",p%d (us)", percentile));
+        out.print(String.format(",count from p%d to p%d", last_percentile, percentile));
+        last_percentile = percentile;
       }
+
+      out.print(",count from p99 to max-value");
 
       out.print(",max (us),mean (us),threads");
       out.println();
@@ -121,18 +128,63 @@ public class HdrLatencyHistogram implements LatencyHistogram {
         continue;
       }
 
+//      Logger logger = Logger.getLogger();
+//      logger.info("pascal start");
+//      logger.info(String.valueOf(op));
+//      for (HistogramIterationValue v : histogram.recordedValues()){
+//        System.out.println("Percentile: " + v.getPercentile());
+//        System.out.println(v);
+//      }
+//      logger.info(histogram.recordedValues().toString());
+//      logger.info("pascal end");
+
       out.print(op.name());
       out.print(",");
       out.print(samples);
-
+      double lastPercentileValue = 0;
       for (int percentile: percentiles) {
         double percentileValue = histogram.getValueAtPercentile(percentile);
         out.print(",");
         out.print(df.format(percentileValue));
+        out.print(",");
+        long lower = Long.parseLong(df.format(histogram.nextNonEquivalentValue(Long.parseLong(df.format(lastPercentileValue)))));
+        long upper = Long.parseLong(df.format(percentileValue));
+
+//        if (histogram.lowestEquivalentValue(lower) != lower) {
+//          System.out.println("There is a mismatch at " + percentile + " at lower from " + op.name() + ": " + lower + " and " + histogram.lowestEquivalentValue(lower));
+//        }
+//
+//        if (histogram.highestEquivalentValue(upper) != upper) {
+//          System.out.println("There is a mismatch at " + percentile + " at upper from " + op.name() + ": " + upper + " and " + histogram.highestEquivalentValue(upper));
+//        }
+
+        out.print(df.format(histogram.getCountBetweenValues(lower, upper)));
+        lastPercentileValue = percentileValue;
       }
 
+
       String max = df.format(histogram.getMaxValueAsDouble());
+      long maxL = histogram.getMaxValue();
       String mean = df.format(histogram.getMean());
+
+      out.print(",");
+      long lower = Long.parseLong(df.format(histogram.nextNonEquivalentValue(Long.parseLong(df.format(lastPercentileValue)))));
+      long upper = maxL;
+
+//      System.out.println("lower:");
+//      System.out.println(lower);
+//      System.out.println("MAX:");
+//      System.out.println(maxL);
+
+//      if (histogram.lowestEquivalentValue(lower) != lower) {
+//        System.out.println("There is a mismatch at max at lower from " + op.name() + ": " + lower + " and " + histogram.lowestEquivalentValue(lower));
+//      }
+//
+//      if (histogram.highestEquivalentValue(upper) != upper) {
+//        System.out.println("There is a mismatch at max at upper from " + op.name() + ": " + upper + " and " + histogram.highestEquivalentValue(upper));
+//      }
+
+      out.print(df.format(histogram.getCountBetweenValues(lower, upper)));
 
       out.print(",");
       out.print(max);
