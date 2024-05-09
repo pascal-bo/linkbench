@@ -14,6 +14,7 @@ public class LinkStoreKeyDB extends GraphStore{
     public static final String CONFIG_LINKLABEL = "linklabel";
     public static final String CONFIG_BULK_INSERT_COUNT = "bulk_insert_count";
     public static final String CONFIG_RANGE_LIMIT = "range_limit";
+    public static final String CONFIG_CLUSTER_ENABLED = "cluster_enabled";
 
     KeyDBGraph keyDBGraph;
 
@@ -25,6 +26,8 @@ public class LinkStoreKeyDB extends GraphStore{
     protected String nodelabel;
     protected String linklabel;
 
+    protected boolean cluster_enabled;
+
     @Override
     public void initialize(Properties props, Phase currentPhase, int threadId) {
         super.initialize(props, currentPhase, threadId);
@@ -33,7 +36,9 @@ public class LinkStoreKeyDB extends GraphStore{
             port = ConfigUtil.getPropertyRequired(props, CONFIG_PORT);
             nodelabel = ConfigUtil.getPropertyRequired(props, CONFIG_NODELABEL);
             linklabel = ConfigUtil.getPropertyRequired(props, CONFIG_LINKLABEL);
+            cluster_enabled = ConfigUtil.getBool(props, CONFIG_CLUSTER_ENABLED);
             phase = currentPhase;
+
 
             try {
                 rangeLimit = ConfigUtil.getInt(props, CONFIG_RANGE_LIMIT);
@@ -47,8 +52,9 @@ public class LinkStoreKeyDB extends GraphStore{
             } catch (LinkBenchConfigError ex) {
                 logger.info("Defaulting to " + bulkInsertCount + "as BULK_INSERT_COUNT.");
             }
+            logger.info("Connecting to: " + host + ":" + port + ". Cluster is set to: " + cluster_enabled);
 
-            keyDBGraph = new KeyDBGraph(host, Integer.parseInt(port));
+            keyDBGraph = new KeyDBGraph(host, Integer.parseInt(port), cluster_enabled);
 
         } catch (Exception ex) {
             String msg = "Failed to connect to KeyDB: " + ex;
