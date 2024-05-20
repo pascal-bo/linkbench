@@ -22,7 +22,7 @@ import java.util.Arrays;
 import com.facebook.LinkBench.LinkBenchOp;
 import com.facebook.LinkBench.LinkStore;
 import com.facebook.LinkBench.Logger;
-import org.HdrHistogram.Histogram;
+import org.HdrHistogram.AtomicHistogram;
 import org.HdrHistogram.HistogramIterationValue;
 
 /**
@@ -35,14 +35,14 @@ import org.HdrHistogram.HistogramIterationValue;
 public class HdrLatencyHistogram implements LatencyHistogram {
 
   private static final int percentiles[] = new int[] {25, 50, 75, 95, 99};
-  private final Histogram histograms[];
+  private final AtomicHistogram histograms[];
   private final int maxThreads;
 
   public HdrLatencyHistogram(int maxThreads, int histogramAccuracy, int maxHistogramValue) {
     this.maxThreads = maxThreads;
-    histograms = new Histogram[LinkStore.MAX_OPTYPES];
+    histograms = new AtomicHistogram[LinkStore.MAX_OPTYPES];
     for (LinkBenchOp op : LinkBenchOp.values()) {
-      histograms[op.ordinal()] = new Histogram(maxHistogramValue, histogramAccuracy);
+      histograms[op.ordinal()] = new AtomicHistogram(maxHistogramValue, histogramAccuracy);
     }
   }
 
@@ -51,7 +51,7 @@ public class HdrLatencyHistogram implements LatencyHistogram {
    */
   public long memoryUsageEstimate() {
     long usageInBytes = 0;
-    for(Histogram histogram : histograms)
+    for(AtomicHistogram histogram : histograms)
     {
       usageInBytes += histogram.getEstimatedFootprintInBytes();
     }
@@ -76,7 +76,7 @@ public class HdrLatencyHistogram implements LatencyHistogram {
     // print percentiles
     for (LinkBenchOp type: LinkBenchOp.values()) {
 
-      Histogram histogram = histograms[type.ordinal()];
+      AtomicHistogram histogram = histograms[type.ordinal()];
       if (histogram.getTotalCount() == 0) { // no samples of this type
         continue;
       }
@@ -122,7 +122,7 @@ public class HdrLatencyHistogram implements LatencyHistogram {
 
     DecimalFormat df = new DecimalFormat("#.##");
     for (LinkBenchOp op: ops) {
-      Histogram histogram = histograms[op.ordinal()];
+      AtomicHistogram histogram = histograms[op.ordinal()];
       long samples = histogram.getTotalCount();
       if (samples == 0) {
         continue;
