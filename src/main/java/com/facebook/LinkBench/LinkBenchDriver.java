@@ -20,7 +20,6 @@ import com.facebook.LinkBench.LinkBenchLoad.LoadProgress;
 import com.facebook.LinkBench.LinkBenchRequest.RequestProgress;
 import com.facebook.LinkBench.stats.LatencyHistogram;
 import com.facebook.LinkBench.stats.LatencyHistogramFactory;
-import com.facebook.LinkBench.stats.LatencyStats;
 import com.facebook.LinkBench.stats.SampledStats;
 import com.facebook.LinkBench.util.ClassLoadUtil;
 import org.apache.commons.cli.*;
@@ -58,6 +57,8 @@ public class LinkBenchDriver {
   private static String logFile = null;
   /** File for final statistics */
   private static PrintStream csvStatsFile = null;
+  /** File for final histogram file */
+  private static String histogramFileName = null;
   /** File for output of incremental csv data */
   private static PrintStream csvStreamFile = null;
   private static boolean doLoad = false;
@@ -299,6 +300,7 @@ public class LinkBenchDriver {
 
     if (csvStatsFile != null) {
       latencyStats.printCSVStats(csvStatsFile, true);
+      latencyStats.printHistogram(histogramFileName, "load", true);
     }
 
     double loadTime_s = (loadTime/1000.0);
@@ -439,6 +441,7 @@ public class LinkBenchDriver {
 
     if (csvStatsFile != null) {
       latencyStats.printCSVStats(csvStatsFile, true);
+      latencyStats.printHistogram(histogramFileName, "request", true);
     }
 
     logger.info("REQUEST PHASE COMPLETED. " + requestsdone +
@@ -534,6 +537,11 @@ public class LinkBenchDriver {
     csvStream.setArgName("file");
     options.addOption(csvStream);
 
+    Option histogramFile = new Option("histogram", "histogram", true,
+            "Histogram output");
+    histogramFile.setArgName("file");
+    options.addOption(histogramFile);
+
     options.addOption("l", false,
                "Execute loading stage of benchmark");
     options.addOption("r", false,
@@ -618,6 +626,11 @@ public class LinkBenchDriver {
         printUsage(options);
         System.exit(EXIT_BADARGS);
       }
+    }
+
+    String histogramFileName = cmd.getOptionValue("histogram"); // May be null
+    if (histogramFileName != null) {
+        LinkBenchDriver.histogramFileName = histogramFileName;
     }
 
     String csvStreamFileName = cmd.getOptionValue("csvstream"); // May be null

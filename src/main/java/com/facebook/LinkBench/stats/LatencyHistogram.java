@@ -42,4 +42,6 @@ public interface LatencyHistogram {
      * @param header true if the header values of the csv should be printed
      */
     public void printCSVStats(PrintStream out, boolean header);
+
+    public void printHistogram(String outFileName, String phase, boolean header);
 }

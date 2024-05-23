@@ -15,15 +15,14 @@
  */
 package com.facebook.LinkBench.stats;
 
+import java.io.FileNotFoundException;
 import java.io.PrintStream;
 import java.text.DecimalFormat;
-import java.util.Arrays;
 
 import com.facebook.LinkBench.LinkBenchOp;
 import com.facebook.LinkBench.LinkStore;
 import com.facebook.LinkBench.Logger;
 import org.HdrHistogram.AtomicHistogram;
-import org.HdrHistogram.HistogramIterationValue;
 
 /**
  * Class used to track latency values using HDR Histogram.  This provides
@@ -102,7 +101,23 @@ public class HdrLatencyHistogram implements LatencyHistogram {
     printCSVStats(out, header, LinkBenchOp.values());
   }
 
-  private void printCSVStats(PrintStream out, boolean header, LinkBenchOp... ops) {
+  @Override
+  public void printHistogram(String outFileName, String phase, boolean header) {
+
+    for (LinkBenchOp op: LinkBenchOp.values()) {
+      AtomicHistogram histogram = histograms[op.ordinal()];
+      try{
+        String fullFileName = phase + "_" + outFileName + "_" + op.name() + ".txt";
+        PrintStream out = new PrintStream(fullFileName);
+        histogram.outputPercentileDistribution(out, 1.0);
+      } catch (FileNotFoundException e){
+        System.out.println("Could not open the file " + outFileName);
+      }
+    }
+
+  }
+
+  private void printCSVStats(PrintStream out, boolean header, LinkBenchOp... ops){
 
     // Write out the header
     if (header) {

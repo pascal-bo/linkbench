@@ -18,11 +18,9 @@ package com.facebook.LinkBench.stats;
 import java.io.PrintStream;
 import java.text.DecimalFormat;
 
-import com.facebook.LinkBench.ConfigUtil;
 import com.facebook.LinkBench.LinkBenchOp;
 import com.facebook.LinkBench.LinkStore;
 import com.facebook.LinkBench.Logger;
-import com.facebook.LinkBench.Level;
 
 
 /**
@@ -180,6 +178,12 @@ public class LatencyStats implements LatencyHistogram {
 
   public void printCSVStats(PrintStream out, boolean header) {
     printCSVStats(out, header, LinkBenchOp.values());
+  }
+
+  @Override
+  public void printHistogram(String outFileName, String phase, boolean header) {
+    Logger logger = Logger.getLogger();
+    logger.info("Histogram creation is not enabled.");
   }
 
   public void printCSVStats(PrintStream out, boolean header, LinkBenchOp... ops) {
