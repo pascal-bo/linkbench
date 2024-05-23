@@ -125,6 +125,7 @@ public class HdrLatencyHistogram implements LatencyHistogram {
       int last_percentile = 0;
       for (int percentile: percentiles) {
         out.print(String.format(",p%d (us)", percentile));
+        out.print(String.format(",count at p%d", percentile));
         out.print(String.format(",count from p%d to p%d", last_percentile, percentile));
         last_percentile = percentile;
       }
@@ -173,6 +174,7 @@ public class HdrLatencyHistogram implements LatencyHistogram {
 //          System.out.println("There is a mismatch at " + percentile + " at upper from " + op.name() + ": " + upper + " and " + histogram.highestEquivalentValue(upper));
 //        }
 
+        out.print(df.format(histogram.getCountAtValue(Long.parseLong(df.format(percentileValue)))));
         out.print(df.format(histogram.getCountBetweenValues(lower, upper)));
         lastPercentileValue = percentileValue;
       }
