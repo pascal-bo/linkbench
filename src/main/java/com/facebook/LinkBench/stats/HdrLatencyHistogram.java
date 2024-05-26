@@ -130,6 +130,8 @@ public class HdrLatencyHistogram implements LatencyHistogram {
         last_percentile = percentile;
       }
 
+      out.print(",count at max-value");
+
       out.print(",count from p99 to max-value");
 
       out.print(",max (us),mean (us),threads");
@@ -165,16 +167,8 @@ public class HdrLatencyHistogram implements LatencyHistogram {
         out.print(",");
         long lower = Long.parseLong(df.format(histogram.nextNonEquivalentValue(Long.parseLong(df.format(lastPercentileValue)))));
         long upper = Long.parseLong(df.format(percentileValue));
-
-//        if (histogram.lowestEquivalentValue(lower) != lower) {
-//          System.out.println("There is a mismatch at " + percentile + " at lower from " + op.name() + ": " + lower + " and " + histogram.lowestEquivalentValue(lower));
-//        }
-//
-//        if (histogram.highestEquivalentValue(upper) != upper) {
-//          System.out.println("There is a mismatch at " + percentile + " at upper from " + op.name() + ": " + upper + " and " + histogram.highestEquivalentValue(upper));
-//        }
-
         out.print(df.format(histogram.getCountAtValue(Long.parseLong(df.format(percentileValue)))));
+        out.print(",");
         out.print(df.format(histogram.getCountBetweenValues(lower, upper)));
         lastPercentileValue = percentileValue;
       }
@@ -185,21 +179,12 @@ public class HdrLatencyHistogram implements LatencyHistogram {
       String mean = df.format(histogram.getMean());
 
       out.print(",");
+      out.print(df.format(histogram.getCountAtValue(maxL)));
+
+
+      out.print(",");
       long lower = Long.parseLong(df.format(histogram.nextNonEquivalentValue(Long.parseLong(df.format(lastPercentileValue)))));
       long upper = maxL;
-
-//      System.out.println("lower:");
-//      System.out.println(lower);
-//      System.out.println("MAX:");
-//      System.out.println(maxL);
-
-//      if (histogram.lowestEquivalentValue(lower) != lower) {
-//        System.out.println("There is a mismatch at max at lower from " + op.name() + ": " + lower + " and " + histogram.lowestEquivalentValue(lower));
-//      }
-//
-//      if (histogram.highestEquivalentValue(upper) != upper) {
-//        System.out.println("There is a mismatch at max at upper from " + op.name() + ": " + upper + " and " + histogram.highestEquivalentValue(upper));
-//      }
 
       out.print(df.format(histogram.getCountBetweenValues(lower, upper)));
 
