@@ -107,7 +107,7 @@ public class HdrLatencyHistogram implements LatencyHistogram {
     for (LinkBenchOp op: LinkBenchOp.values()) {
       AtomicHistogram histogram = histograms[op.ordinal()];
       try{
-        String fullFileName = phase + "_" + outFileName + "_" + op.name() + ".txt";
+        String fullFileName = outFileName + "_" + phase + "_" + op.name() + ".txt";
         PrintStream out = new PrintStream(fullFileName);
         histogram.outputPercentileDistribution(out, 1.0);
       } catch (FileNotFoundException e){

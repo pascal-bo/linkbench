@@ -55,6 +55,8 @@ public class LinkBenchDriver {
   private static String workloadConfigFile = null;
   private static Properties cmdLineProps = null;
   private static String logFile = null;
+  private static PrintStream logFileLoad = null;
+  private static PrintStream logFileRequest = null;
   /** File for final statistics */
   private static PrintStream csvStatsFile = null;
   /** File for final histogram file */
@@ -326,6 +328,32 @@ public class LinkBenchDriver {
           (long) Math.round((actualLinks+actualCounts) / loadTime_s),
           (long) Math.round((actualLinks+actualCounts+actualNodes) / loadTime_s)));
     }
+    // print the results to a logfile if a logfile is specified
+    // print the results to a logfile if a logfile is specified
+    if (logFileLoad != null) {
+      // what cols do I need
+      logFileLoad.print("phase,nodesLoaded,expectedNodesLoaded,linksLoaded,linksPerNode,countsLoaded,totalTimeInSeconds,linksPerSecond,linksAndCountsPerSecond,linksAndCountsAndNodesPerSecond");
+      logFileLoad.println();
+      logFileLoad.print("load");
+      logFileLoad.print(",");
+      logFileLoad.print(actualNodes);
+      logFileLoad.print(",");
+      logFileLoad.print(expectedNodes);
+      logFileLoad.print(",");
+      logFileLoad.print(actualLinks);
+      logFileLoad.print(",");
+      logFileLoad.print(actualLinks / (double) actualNodes);
+      logFileLoad.print(",");
+      logFileLoad.print(actualCounts);
+      logFileLoad.print(",");
+      logFileLoad.print(loadTime_s);
+      logFileLoad.print(",");
+      logFileLoad.print((long) Math.round(actualLinks / loadTime_s));
+      logFileLoad.print(",");
+      logFileLoad.print((long) Math.round((actualLinks+actualCounts) / loadTime_s));
+      logFileLoad.print(",");
+      logFileLoad.print((long) Math.round((actualLinks+actualCounts+actualNodes) / loadTime_s));
+    }
   }
 
   /**
@@ -443,6 +471,9 @@ public class LinkBenchDriver {
       latencyStats.printCSVStats(csvStatsFile, true);
       latencyStats.printHistogram(histogramFileName, "request", true);
     }
+    if (histogramFileName != null) {
+      latencyStats.printHistogram(histogramFileName, "request", true);
+    }
 
     logger.info("REQUEST PHASE COMPLETED. " + requestsdone +
                  " requests done in " + (benchmarkTime/1000) + " seconds." +
@@ -452,6 +483,22 @@ public class LinkBenchDriver {
           "request threads aborted.  See error log entries for details.",
           abortedRequesters, nrequesters));
     }
+
+    // print the results to a logfile if a logfile is specified
+    if (logFileRequest != null) {
+      // what cols do I need
+      logFileRequest.print("phase,requestsDone,totalTimeInSeconds,requestsPerSecond");
+      logFileRequest.println();
+      logFileRequest.print("request");
+      logFileRequest.print(",");
+      logFileRequest.print(requestsdone);
+      logFileRequest.print(",");
+      logFileRequest.print(benchmarkTime/1000);
+      logFileRequest.print(",");
+      logFileRequest.print((1000*requestsdone)/benchmarkTime);
+    }
+
+
   }
 
   /**
@@ -523,7 +570,8 @@ public class LinkBenchDriver {
     config.setArgName("file");
     options.addOption(config);
 
-    Option log = new Option("L", true, "Log to this file");
+    Option log = new Option("L", true, "Log request phase to file with this name and request" +
+            " prefix and load phase to file with this name and load phase");
     log.setArgName("file");
     options.addOption(log);
 
@@ -598,7 +646,31 @@ public class LinkBenchDriver {
     doLoad = cmd.hasOption('l');
     doRequest = cmd.hasOption('r');
 
-    logFile = cmd.getOptionValue('L'); // May be null
+    String logFileName = cmd.getOptionValue('L'); // May be null
+    logFile = logFileName;
+
+    if (logFileName != null) {
+      if (doRequest) {
+        try {
+          logFileRequest = new PrintStream(new FileOutputStream(logFileName + "_request.txt"));
+        } catch (FileNotFoundException e) {
+          System.err.println("Could not open file request_" + logFileName +
+                  " for writing");
+          printUsage(options);
+          System.exit(EXIT_BADARGS);
+        }
+      }
+      if (doLoad) {
+        try {
+          logFileLoad = new PrintStream(new FileOutputStream(logFileName + "_load.txt"));
+        } catch (FileNotFoundException e) {
+          System.err.println("Could not open file load_" + logFileName +
+                  " for writing");
+          printUsage(options);
+          System.exit(EXIT_BADARGS);
+        }
+      }
+    }
 
     configFile = cmd.getOptionValue('c');
     if (configFile == null) {
